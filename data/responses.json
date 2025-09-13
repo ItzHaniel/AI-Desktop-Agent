@@ -1,0 +1,14 @@
+{
+  "greetings": [
+    "Hello! How can I help?",
+    "Hi there! What can I do?"
+  ],
+  "confirmations": [
+    "Done!",
+    "Task completed!"
+  ],
+  "errors": [
+    "Sorry, something went wrong.",
+    "Please try again."
+  ]
+}
