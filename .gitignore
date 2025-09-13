@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.env
+logs/
+data/conversation_history.json
+data/local_calendar.json
+data/reminders.json
