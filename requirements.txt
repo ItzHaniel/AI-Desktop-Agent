@@ -9,7 +9,9 @@ python-dotenv>=1.0.0
 colorama>=0.4.6
 rich>=13.0.0
 pyautogui>=0.9.50
-
+pygame
+groq
+yt-dlp
 # Optional dependencies - may need alternatives
 # spotipy>=1.22.0
 # pygame>=2.5.0
