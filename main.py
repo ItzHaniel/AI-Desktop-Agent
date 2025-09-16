@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Specter AI Agent - Complete Main Entry Point
-Hackathon Version with Full Module Integration and Dependency Handling
+Enhanced with Voice Input (STT) and Text-to-Speech (TTS)
 """
 from dotenv import load_dotenv
 load_dotenv()
@@ -42,7 +42,7 @@ print("🔧 Loading Specter modules...")
 try:
     from speech_engine import SpeechEngine
     modules_status['speech'] = True
-    print("✅ Speech Engine loaded")
+    print("✅ Enhanced Speech Engine loaded")
 except ImportError as e:
     modules_status['speech'] = False
     print(f"❌ Speech Engine failed: {e}")
@@ -138,7 +138,6 @@ except ImportError as e:
     print(f"❌ Email Handler failed: {e}")
     EmailHandler = None
 
-
 class SpecterAgent:
     def __init__(self):
         """Initialize Specter with available modules"""
@@ -148,6 +147,9 @@ class SpecterAgent:
 
         self.logger = logger
         self.config = Config() if CONFIG_AVAILABLE else None
+        
+        # Voice input mode flag (NEW)
+        self.voice_mode = False
 
         # Initialize available modules
         self.initialize_modules()
@@ -158,14 +160,16 @@ class SpecterAgent:
 
         print(f"\n🎉 Specter initialized with {available_count}/{total_count} modules!")
         if available_count < total_count:
-            print("💡 Run 'pip install pygame newsapi-python' to enable all features")
+            print("💡 Run 'pip install pygame newsapi-python SpeechRecognition pyttsx3' to enable all features")
 
     def initialize_modules(self):
         """Initialize all available modules"""
-        # Initialize Speech Engine
+        # Initialize Speech Engine with TTS toggle support
         if modules_status.get('speech') and SpeechEngine:
             try:
-                self.speech = SpeechEngine()
+                # Initialize with TTS enabled by default (CHANGED FROM FALSE TO TRUE)
+                self.speech = SpeechEngine(tts_enabled=True)
+                print("🎤 Speech Engine initialized (TTS enabled, STT ready)")
             except Exception as e:
                 print(f"⚠️ Speech Engine init failed: {e}")
                 self.speech = None
@@ -262,20 +266,52 @@ class SpecterAgent:
         else:
             self.email = None
 
+    def get_voice_input(self):
+        """Get voice input from user (NEW METHOD)"""
+        if not self.speech or not self.speech.microphone:
+            print("❌ Microphone not available for voice input")
+            return None
+            
+        try:
+            print("\n🎤 Voice input mode - Speak your command...")
+            # CHANGE THIS LINE:
+            voice_text = self.speech.listen(timeout=10, phrase_limit=15)  # ← Fixed parameter name
+            
+            if voice_text and voice_text.strip():
+                print(f"🎧 Voice input received: '{voice_text}'")
+                return voice_text.strip()
+            else:
+                print("⚠️ No voice input detected")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Voice input error: {e}")
+            print(f"❌ Voice input failed: {e}")
+            return None
+
+
     def listen_and_respond(self):
-        """Main interaction loop"""
+        """Main interaction loop with voice input support"""
         print("\n" + "=" * 60)
         print("🎤 Specter AI AGENT - READY TO ASSIST")
         print("=" * 60)
         print("💡 Available commands:")
         print("   • Type 'help' for full command list")
         print("   • Type 'status' to see module availability")
+        print("   • Type 'listen' to use voice input")  # NEW
         print("   • Type 'quit' to exit")
         print("=" * 60)
 
         while True:
             try:
-                user_input = input("\n🎯 You: ").strip()
+                # Get user input (text or voice) (ENHANCED)
+                if self.voice_mode:
+                    print(f"\n🎙️ Voice Mode Active (type 'text mode' to switch back)")
+                    user_input = self.get_voice_input()
+                    if user_input is None:
+                        continue
+                else:
+                    user_input = input("\n🎯 You: ").strip()
 
                 if not user_input:
                     continue
@@ -304,6 +340,12 @@ class SpecterAgent:
 
                 # Display response
                 print(f"\n🤖 Specter: {response}")
+                
+                # Add speech output for responses
+                if (self.speech and self.speech.tts_enabled and 
+                    isinstance(response, str) and len(response) < 200 and
+                    not any(word in response for word in ["Available commands:", "MODULE STATUS", "INSTALLATION HELP"])):
+                    self.speech.speak_async(response)
 
             except KeyboardInterrupt:
                 print("\n\n👋 Specter shutting down...")
@@ -313,11 +355,61 @@ class SpecterAgent:
                 print(f"❌ Error: {str(e)}")
 
     def process_command(self, command):
-        """Enhanced command processing with intent detection"""
+        """Enhanced command processing with voice input commands"""
         try:
             command_clean = command.lower().strip()
             
-            # First, try intent detection with Groq
+            # Voice input mode commands (NEW)
+            if any(word in command_clean for word in ['listen', 'voice mode', 'start listening']):
+                if self.speech and self.speech.microphone:
+                    self.voice_mode = True
+                    return "🎙️ Voice input mode activated! Speak your commands. Say 'text mode' to switch back."
+                else:
+                    return "🎤 Microphone not available for voice input"
+
+            elif any(word in command_clean for word in ['text mode', 'stop listening', 'keyboard mode']):
+                self.voice_mode = False
+                return "⌨️ Text input mode activated! Type your commands normally."
+
+            elif any(word in command_clean for word in ['test microphone', 'mic test']):
+                if self.speech and self.speech.microphone:
+                    print("🎤 Testing microphone - say something...")
+                    result = self.speech.listen(timeout=5)
+                    if result:
+                        return f"✅ Microphone test successful! You said: '{result}'"
+                    else:
+                        return "❌ Microphone test failed - no speech detected"
+                else:
+                    return "🎤 No microphone available for testing"
+            
+            # Speech toggle commands (EXISTING)
+            if any(word in command_clean for word in ['enable voice', 'turn on speech', 'enable tts']):
+                if self.speech:
+                    return self.speech.toggle_tts(True)
+                else:
+                    return "🎤 Speech engine not available"
+
+            elif any(word in command_clean for word in ['disable voice', 'turn off speech', 'disable tts']):
+                if self.speech:
+                    return self.speech.toggle_tts(False)
+                else:
+                    return "🎤 Speech engine not available"
+
+            elif any(word in command_clean for word in ['test speech', 'speech test']):
+                if self.speech:
+                    self.speech.test_functionality()
+                    return "🧪 Speech engine test completed"
+                else:
+                    return "🎤 Speech engine not available"
+
+            elif any(word in command_clean for word in ['speech status', 'voice status']):
+                if self.speech:
+                    status = self.speech.get_status()
+                    return f"🎤 Speech Status:\n• TTS Available: {status['tts_available']}\n• TTS Enabled: {status['tts_enabled']}\n• Microphone: {status['speech_recognition_available']}\n• Voice Mode: {'Active' if self.voice_mode else 'Inactive'}"
+                else:
+                    return "🎤 Speech engine not available"
+            
+            # First, try intent detection with Groq (EXISTING)
             if hasattr(self, 'conversation') and self.conversation and self.conversation.openai_client:
                 intent_result = self.conversation.detect_intent_and_respond(command)
                 
@@ -327,7 +419,7 @@ class SpecterAgent:
                     
                     print(f"🎯 Intent detected: {function_name}")
                     
-                    # Route to appropriate function
+                    # Route to appropriate function (EXISTING - ALL PRESERVED)
                     if function_name == "send_email":
                         if self.email:
                             return self.email.send_email_interactive()
@@ -378,13 +470,13 @@ class SpecterAgent:
                         
                     elif function_name == "get_draft":
                         if self.email:
-                            return self.email.get_saved_draft()  # ← This should work now!
+                            return self.email.get_saved_draft()
                         else:
                             return "📧 Email module not available"
 
                     elif function_name == "send_draft":
                         if self.email:
-                            return self.email.send_saved_draft()
+                            return self.email.send_draft()
                         else:
                             return "📧 Email module not available"
                 
@@ -400,8 +492,7 @@ class SpecterAgent:
                 elif isinstance(intent_result, str):
                     return intent_result
             
-            # Fallback to original keyword-based routing if Groq not available
-            # Direct module calls instead of handle_* methods
+            # Fallback to original keyword-based routing (EXISTING - ALL PRESERVED)
             if any(word in command_clean for word in ['play', 'music', 'song']):
                 if self.music:
                     return self.music.handle_music_request(command)
@@ -410,7 +501,7 @@ class SpecterAgent:
                     
             elif any(word in command_clean for word in ['email', 'send mail', 'send email']):
                 if self.email:
-                    return self.email.send_email_interactive()  # Direct call
+                    return self.email.send_email_interactive()
                 else:
                     return "📧 Email module not available"
                     
@@ -462,7 +553,7 @@ class SpecterAgent:
             return f"Sorry, I encountered an error: {str(e)}"
 
     def fallback_conversation(self, command):
-        """Basic conversation when AI modules aren't available"""
+        """Basic conversation when AI modules aren't available (EXISTING - UNCHANGED)"""
         responses = {
             'hello': "Hello! I'm Specter, your AI assistant. How can I help you today?",
             'hi': "Hi there! What can I do for you?",
@@ -478,13 +569,27 @@ class SpecterAgent:
             if key in command_lower:
                 return response
 
-        return "I understand you're trying to chat! For full AI conversation, configure OpenAI or Gemini API keys in your .env file. For now, I can help with specific tasks - type 'help' to see what I can do!"
+        return "I understand you're trying to chat! For full AI conversation, configure GROQ_API_KEY in your .env file. For now, I can help with specific tasks - type 'help' to see what I can do!"
 
     def show_help(self):
-        """Show available commands based on loaded modules"""
+        """Show available commands based on loaded modules (ENHANCED)"""
         help_text = "\n🤖 Specter AI AGENT - AVAILABLE COMMANDS\n"
         help_text += "=" * 50 + "\n"
 
+        # Add speech and voice input commands (ENHANCED)
+        if self.speech:
+            help_text += "\n🎤 SPEECH & VOICE (Available):\n"
+            help_text += "   • listen / voice mode       - Switch to voice input\n"
+            help_text += "   • text mode                 - Switch to text input\n"
+            help_text += "   • enable voice              - Turn on text-to-speech\n"
+            help_text += "   • disable voice             - Turn off text-to-speech\n"
+            help_text += "   • test speech               - Test TTS functionality\n"
+            help_text += "   • test microphone           - Test STT functionality\n"
+            help_text += "   • speech status             - Check speech engine status\n"
+        else:
+            help_text += "\n🎤 SPEECH (Unavailable - install SpeechRecognition pyttsx3)\n"
+
+        # All existing help sections preserved
         if self.music:
             help_text += "\n🎵 MUSIC (Available):\n"
             help_text += "   • play [song name] - Play music\n"
@@ -536,12 +641,12 @@ class SpecterAgent:
         print(help_text)
 
     def show_status(self):
-        """Show module status"""
+        """Show module status (ENHANCED)"""
         print("\n📊 Specter MODULE STATUS")
         print("=" * 30)
 
         status_map = {
-            'speech': ('🎤 Speech Engine', self.speech),
+            'speech': ('🎤 Enhanced Speech Engine', self.speech),
             'conversation': ('💬 Conversation', self.conversation),
             'file_manager': ('📁 File Manager', self.file_manager),
             'music': ('🎵 Music Player', self.music),
@@ -563,6 +668,18 @@ class SpecterAgent:
 
         print(f"\n📈 {available}/{len(status_map)} modules active")
 
+        # Enhanced speech status (ENHANCED)
+        if self.speech:
+            print("\n🎤 Speech Engine Details:")
+            try:
+                speech_status = self.speech.get_status()
+                print(f"   🔊 TTS Available: {speech_status['tts_available']}")
+                print(f"   🗣️ TTS Enabled: {speech_status['tts_enabled']}")
+                print(f"   🎧 Microphone: {speech_status['speech_recognition_available']}")
+                print(f"   🎙️ Voice Mode: {'Active' if self.voice_mode else 'Inactive'}")
+            except Exception as e:
+                print(f"   ⚠️ Status check failed: {e}")
+
         if self.system:
             try:
                 quick_info = self.system.get_quick_status()
@@ -573,11 +690,20 @@ class SpecterAgent:
         print("=" * 30)
 
     def show_install_help(self):
-        """Show installation help"""
+        """Show installation help (ENHANCED)"""
         print("\n🔧 INSTALLATION HELP")
         print("=" * 30)
         print("To enable all features, install missing packages:")
         print()
+
+        # Enhanced speech engine installation help
+        if not self.speech:
+            print("🎤 For Complete Speech Engine (STT + TTS):")
+            print("   pip install SpeechRecognition pyttsx3 pyaudio")
+            print("   # On Windows also: pip install pywin32")
+            print("   # On macOS: brew install portaudio")
+            print("   # On Linux: sudo apt-get install portaudio19-dev")
+            print()
 
         if not self.music:
             print("🎵 For Music Player:")
@@ -590,28 +716,35 @@ class SpecterAgent:
             print()
 
         print("🔑 For full AI features, add to .env file:")
-        print("   OPENAI_API_KEY=your_key_here")
+        print("   GROQ_API_KEY=your_groq_key")
         print("   NEWS_API_KEY=your_news_key")
         print("   WEATHER_API_KEY=your_weather_key")
         print("=" * 30)
 
     def shutdown(self):
-        """Graceful shutdown"""
+        """Graceful shutdown (ENHANCED)"""
         print("\n👋 Thank you for using Specter!")
         print("🎯 Hackathon version - Built with ❤️")
 
-        # Cleanup
+        # Cleanup (EXISTING + ENHANCED)
         try:
             if self.music:
                 self.music.stop_music()
         except:
             pass
+        
+        # Enhanced speech cleanup
+        try:
+            if self.speech:
+                if hasattr(self.speech, 'tts_manager') and self.speech.tts_manager:
+                    self.speech.tts_manager.stop()
+        except:
+            pass
 
         print("🔚 Specter shutting down...")
 
-
 def main():
-    """Main function"""
+    """Main function (UNCHANGED)"""
     try:
         Specter = SpecterAgent()
         Specter.listen_and_respond()
@@ -623,7 +756,6 @@ def main():
         return 1
 
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
