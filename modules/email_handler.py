@@ -44,17 +44,26 @@ class EmailHandler:
         print("Email Handler initialized!")
     
     def handle_email_request(self, command):
-        """Process email-related commands"""
         command = command.lower()
         
-        if "send email" in command or "send mail" in command:
-            return self.send_email_wizard(command)
+        if any(word in command for word in ["send", "compose", "email", "mail", "message"]):
+            if "draft" in command:
+                return self.send_saved_draft()
+            else:
+                return self.send_email_interactive()
+        elif any(word in command for word in ["draft", "saved", "retrieve", "show"]):
+            if "send" in command:
+                return self.send_saved_draft()
+            else:
+                return self.get_saved_draft()
         elif "check email" in command or "read email" in command:
             return self.check_emails()
         elif "unread" in command:
             return self.get_unread_count()
         else:
-            return "I can help you send emails or check your inbox. What would you like to do?"
+            return "I can help you send emails, manage drafts, or check your inbox. What would you like to do?"
+
+
     
     def send_email_wizard(self, command):
         """Interactive email sending wizard"""
@@ -312,3 +321,189 @@ class EmailHandler:
             return "❌ Authentication failed. Check email credentials."
         except Exception as e:
             return f"❌ Connection test failed: {str(e)}"
+
+    def send_email_interactive(self):
+        try:
+            print("\n📧 INTERACTIVE EMAIL COMPOSER")
+            print("=" * 40)
+            
+            # Get recipient
+            recipient = input("📧 To (recipient email): ").strip()
+            if not recipient:
+                return "❌ Email cancelled - no recipient provided."
+            
+            # Get subject
+            subject = input("📝 Subject: ").strip()
+            if not subject:
+                subject = "Message from Specter"
+            
+            # Get body
+            print("💬 Message (press Enter twice when done):")
+            body_lines = []
+            empty_lines = 0
+            
+            while empty_lines < 2:
+                line = input()
+                if line.strip() == "":
+                    empty_lines += 1
+                else:
+                    empty_lines = 0
+                body_lines.append(line)
+            
+            # Remove the extra empty lines at the end
+            while body_lines and not body_lines[-1].strip():
+                body_lines.pop()
+            
+            body = "\n".join(body_lines)
+            
+            if not body.strip():
+                body = "Message sent via Specter AI Assistant"
+            
+            # Show email preview
+            print(f"\n📋 EMAIL PREVIEW:")
+            print(f"To: {recipient}")
+            print(f"Subject: {subject}")
+            print(f"Message: {body[:100]}..." if len(body) > 100 else f"Message: {body}")
+            
+            # Check credentials AFTER composing the email
+            if not self.email_address or not self.email_password:
+                print("\n⚠️ EMAIL CREDENTIALS NOT CONFIGURED")
+                print("To actually send this email, you need to configure your email settings.")
+                print("Add these to your .env file:")
+                print("EMAIL_ADDRESS=your_email@gmail.com")
+                print("EMAIL_PASSWORD=your_app_password")
+                
+                save_choice = input("\n💾 Would you like to save this email draft for later? (yes/y): ").lower()
+                
+                if save_choice in ['yes', 'y']:
+                    # Save email draft to a file
+                    draft_file = Path("data") / "email_draft.txt"
+                    draft_file.parent.mkdir(exist_ok=True)
+                    
+                    with open(draft_file, 'w', encoding='utf-8') as f:
+                        f.write(f"To: {recipient}\n")
+                        f.write(f"Subject: {subject}\n")
+                        f.write(f"Message:\n{body}\n")
+                    
+                    return f"📧 Email draft saved to {draft_file}. Configure your email settings and try again!"
+                else:
+                    return "📧 Email not sent - credentials not configured."
+            
+            # If credentials are available, confirm and send
+            confirm = input("\n✅ Send this email? (yes/y to confirm): ").lower()
+            
+            if confirm in ['yes', 'y']:
+                # Send the email using existing method
+                return self.send_email(recipient, subject, body)
+            else:
+                return "📧 Email cancelled by user."
+                
+        except KeyboardInterrupt:
+            return "\n📧 Email composition cancelled."
+        except Exception as e:
+            self.logger.error(f"Interactive email error: {e}")
+            return f"❌ Error in email composition: {str(e)}"
+
+    def get_saved_draft(self):
+        """Retrieve saved email draft if it exists"""
+        try:
+            draft_file = Path("data") / "email_draft.txt"
+            
+            if draft_file.exists():
+                with open(draft_file, 'r', encoding='utf-8') as f:
+                    draft_content = f.read()
+                
+                return f"📧 SAVED EMAIL DRAFT:\n{'=' * 40}\n\n{draft_content}\n\n💡 To send this draft, configure your email credentials in .env and try 'send email' again."
+            else:
+                return "📧 No saved email draft found."
+                
+        except Exception as e:
+            self.logger.error(f"Draft retrieval error: {e}")
+            return "❌ Error retrieving email draft."
+
+    def send_saved_draft(self):
+        """Send the previously saved draft"""
+        try:
+            draft_file = Path("data") / "email_draft.txt"
+            
+            if not draft_file.exists():
+                return "📧 No saved draft found to send."
+            
+            if not self.email_address or not self.email_password:
+                return self.setup_instructions()
+            
+            # Parse the saved draft
+            with open(draft_file, 'r', encoding='utf-8') as f:
+                draft_content = f.read()
+            
+            lines = draft_content.strip().split('\n')
+            
+            # Extract details
+            recipient = ""
+            subject = ""
+            message_lines = []
+            
+            current_section = None
+            
+            for line in lines:
+                if line.startswith("To: "):
+                    recipient = line[4:].strip()
+                elif line.startswith("Subject: "):
+                    subject = line[9:].strip()
+                elif line.startswith("Message:"):
+                    current_section = "message"
+                    continue
+                elif current_section == "message":
+                    message_lines.append(line)
+            
+            message = '\n'.join(message_lines)
+            
+            if not recipient:
+                return "❌ Draft format error - no recipient found."
+            
+            # Show preview and confirm
+            print(f"\n📋 SENDING SAVED DRAFT:")
+            print(f"To: {recipient}")
+            print(f"Subject: {subject}")
+            print(f"Message: {message[:100]}..." if len(message) > 100 else f"Message: {message}")
+            
+            confirm = input("\n✅ Send this saved draft? (yes/y to confirm): ").lower()
+            
+            if confirm in ['yes', 'y']:
+                result = self.send_email(recipient, subject, message)
+                
+                # Delete draft after successful send
+                if "✅" in result:
+                    draft_file.unlink()  # Delete the draft file
+                    return f"{result}\n📧 Draft deleted after successful send."
+                else:
+                    return result
+            else:
+                return "📧 Draft sending cancelled."
+                
+        except Exception as e:
+            self.logger.error(f"Send saved draft error: {e}")
+            return f"❌ Error sending saved draft: {str(e)}"
+
+    def send_email_auto(self, recipient, subject, message):
+        """Send email with automatically extracted details"""
+        try:
+            if not self.email_address or not self.email_password:
+                return f"📧 Email details auto-extracted!\n\nTo: {recipient}\nSubject: {subject}\nMessage: {message}\n\n{self.setup_instructions()}"
+            
+            # Show extracted details and confirm
+            print(f"\n📋 AUTO-EXTRACTED EMAIL:")
+            print(f"To: {recipient}")
+            print(f"Subject: {subject}")
+            print(f"Message: {message}")
+            
+            confirm = input("\n✅ Send this email? (yes/y to confirm): ").lower()
+            
+            if confirm in ['yes', 'y']:
+                return self.send_email(recipient, subject, message)
+            else:
+                return "📧 Email cancelled by user."
+                
+        except Exception as e:
+            self.logger.error(f"Auto email error: {e}")
+            return f"❌ Error processing auto email: {str(e)}"

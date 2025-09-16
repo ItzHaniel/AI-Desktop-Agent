@@ -3,6 +3,8 @@
 Specter AI Agent - Complete Main Entry Point
 Hackathon Version with Full Module Integration and Dependency Handling
 """
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
 import sys
@@ -21,7 +23,7 @@ basic_logger = logging.getLogger("Specter")
 
 # Try to import utils modules first
 try:
-    from config import Config
+    from config import Configp
     from logger import setup_logger
     logger = setup_logger()
     CONFIG_AVAILABLE = True
@@ -311,75 +313,152 @@ class SpecterAgent:
                 print(f"❌ Error: {str(e)}")
 
     def process_command(self, command):
-        """Process user commands and route to appropriate modules"""
+        """Enhanced command processing with intent detection"""
         try:
-            command_lower = command.lower().strip()
+            command_clean = command.lower().strip()
+            
+            # First, try intent detection with Groq
+            if hasattr(self, 'conversation') and self.conversation and self.conversation.openai_client:
+                intent_result = self.conversation.detect_intent_and_respond(command)
+                
+                # Check if it's a function call
+                if isinstance(intent_result, dict) and intent_result.get("type") == "function_call":
+                    function_name = intent_result.get("function")
+                    
+                    print(f"🎯 Intent detected: {function_name}")
+                    
+                    # Route to appropriate function
+                    if function_name == "send_email":
+                        if self.email:
+                            return self.email.send_email_interactive()
+                        else:
+                            return "📧 Email module not available"
+                            
+                    elif function_name == "play_music":
+                        if self.music:
+                            return self.music.handle_music_request(command)
+                        else:
+                            return "🎵 Music module not available"
+                            
+                    elif function_name == "manage_files":
+                        if self.file_manager:
+                            return self.file_manager.handle_file_request(command)
+                        else:
+                            return "📁 File manager not available"
+                            
+                    elif function_name == "get_news":
+                        if self.news:
+                            return self.news.get_news(command)
+                        else:
+                            return "📰 News module not available"
+                            
+                    elif function_name == "get_weather":
+                        if self.weather:
+                            return self.weather.get_weather(command)
+                        else:
+                            return "🌤️ Weather module not available"
+                            
+                    elif function_name == "schedule_event":
+                        if self.calendar:
+                            return self.calendar.handle_calendar_request(command)
+                        else:
+                            return "📅 Calendar module not available"
+                            
+                    elif function_name == "launch_app":
+                        if self.launcher:
+                            return self.launcher.launch_application(command)
+                        else:
+                            return "🚀 App launcher not available"
+                            
+                    elif function_name == "system_info":
+                        if self.system:
+                            return self.system.get_system_info()
+                        else:
+                            return "📊 System monitor not available"
+                        
+                    elif function_name == "get_draft":
+                        if self.email:
+                            return self.email.get_saved_draft()  # ← This should work now!
+                        else:
+                            return "📧 Email module not available"
 
-            # Music commands
-            if any(word in command_lower for word in ['play', 'music', 'song', 'volume', 'stop music', 'pause']):
+                    elif function_name == "send_draft":
+                        if self.email:
+                            return self.email.send_saved_draft()
+                        else:
+                            return "📧 Email module not available"
+                
+                    elif function_name == "send_email_auto":
+                        if self.email:
+                            params = intent_result.get("params", {})
+                            return self.email.send_email_auto(
+                                params.get("recipient"),
+                                params.get("subject"),
+                                params.get("message")
+                            )
+                # If it's a regular chat response
+                elif isinstance(intent_result, str):
+                    return intent_result
+            
+            # Fallback to original keyword-based routing if Groq not available
+            # Direct module calls instead of handle_* methods
+            if any(word in command_clean for word in ['play', 'music', 'song']):
                 if self.music:
                     return self.music.handle_music_request(command)
                 else:
-                    return "🎵 Music module not available. Install pygame: pip install pygame"
-
-            # File commands
-            elif any(word in command_lower for word in ['find', 'file', 'folder', 'organize', 'search files']):
+                    return "🎵 Music module not available"
+                    
+            elif any(word in command_clean for word in ['email', 'send mail', 'send email']):
+                if self.email:
+                    return self.email.send_email_interactive()  # Direct call
+                else:
+                    return "📧 Email module not available"
+                    
+            elif any(word in command_clean for word in ['find', 'file', 'folder', 'organize']):
                 if self.file_manager:
                     return self.file_manager.handle_file_request(command)
                 else:
-                    return "📁 File manager module not available"
-
-            # App launcher commands
-            elif any(word in command_lower for word in ['open', 'launch', 'start', 'run app', 'close app']):
-                if self.launcher:
-                    return self.launcher.launch_application(command)
-                else:
-                    return "🚀 App launcher module not available"
-
-            # News commands
-            elif any(word in command_lower for word in ['news', 'headlines', 'current events']):
+                    return "📁 File manager not available"
+                    
+            elif any(word in command_clean for word in ['news', 'headlines']):
                 if self.news:
                     return self.news.get_news(command)
                 else:
-                    return "📰 News module not available. Install newsapi: pip install newsapi-python"
-
-            # Weather commands
-            elif any(word in command_lower for word in ['weather', 'temperature', 'forecast']):
+                    return "📰 News module not available"
+                    
+            elif any(word in command_clean for word in ['weather', 'forecast']):
                 if self.weather:
                     return self.weather.get_weather(command)
                 else:
                     return "🌤️ Weather module not available"
-
-            # Calendar commands
-            elif any(word in command_lower for word in ['calendar', 'schedule', 'meeting', 'reminder', 'appointment']):
+                    
+            elif any(word in command_clean for word in ['calendar', 'schedule', 'meeting']):
                 if self.calendar:
                     return self.calendar.handle_calendar_request(command)
                 else:
                     return "📅 Calendar module not available"
-
-            # Email commands
-            elif any(word in command_lower for word in ['email', 'send mail', 'check mail']):
-                if self.email:
-                    return self.email.handle_email_request(command)
+                    
+            elif any(word in command_clean for word in ['open', 'launch', 'start']):
+                if self.launcher:
+                    return self.launcher.launch_application(command)
                 else:
-                    return "📧 Email module not available"
-
-            # System commands
-            elif any(word in command_lower for word in ['system', 'performance', 'cpu', 'memory', 'disk']):
+                    return "🚀 App launcher not available"
+                    
+            elif any(word in command_clean for word in ['system', 'performance']):
                 if self.system:
                     return self.system.get_system_info()
                 else:
-                    return "📊 System monitor module not available"
+                    return "📊 System monitor not available"
 
-            # Conversation (default)
             else:
+                # Default to conversation
                 if self.conversation:
                     return self.conversation.chat(command)
                 else:
                     return self.fallback_conversation(command)
-
+                
         except Exception as e:
-            self.logger.error(f"Command processing error: {e}")
+            self.logger.error(f"Enhanced command processing error: {e}")
             return f"Sorry, I encountered an error: {str(e)}"
 
     def fallback_conversation(self, command):
