@@ -17,3 +17,6 @@ yt-dlp
 # pygame>=2.5.0
 # newsapi-python>=0.2.6
 # pywin32>=306
+
+#For GUI
+tkinter

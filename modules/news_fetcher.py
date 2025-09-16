@@ -1,37 +1,38 @@
 #!/usr/bin/env python3
 """
-News Fetcher - Complete news and article retrieval system
+News Fetcher - Groq AI Powered Version
+Uses your existing Groq API to generate news summaries
 """
 
-import requests
+import openai
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from utils.logger import setup_logger
-
-# Optional: NewsAPI client
-try:
-    from newsapi import NewsApiClient
-    NEWSAPI_AVAILABLE = True
-except ImportError:
-    NEWSAPI_AVAILABLE = False
 
 class NewsFetcher:
     def __init__(self):
         self.logger = setup_logger()
-        self.api_key = os.getenv('NEWS_API_KEY')
         
-        # Initialize NewsAPI client if available
-        if NEWSAPI_AVAILABLE and self.api_key:
-            self.newsapi = NewsApiClient(api_key=self.api_key)
+        # Use same Groq setup as conversation module
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        
+        if groq_api_key:
+            self.openai_client = openai.OpenAI(
+                api_key=groq_api_key,
+                base_url="https://api.groq.com/openai/v1"
+            )
+            self.model_name = "llama-3.1-8b-instant"
+            print("✅ Groq-Powered News Fetcher initialized!")
         else:
-            self.newsapi = None
+            self.openai_client = None
+            self.model_name = None
+            print("❌ GROQ_API_KEY not found. Add it to your .env file.")
         
-        self.base_url = "https://newsapi.org/v2"
-        
-        print("News Fetcher initialized!")
-    
     def get_news(self, query):
-        """Main news fetching function"""
+        """Main news fetching function using Groq AI"""
+        if not self.openai_client:
+            return "❌ Groq API not configured. Add GROQ_API_KEY to your .env file."
+        
         query = query.lower()
         
         try:
@@ -45,16 +46,18 @@ class NewsFetcher:
                 return self.get_category_news("sports")
             elif "health" in query:
                 return self.get_category_news("health")
-            elif any(word in query for word in ["entertainment", "celebrity", "movies"]):
+            elif "entertainment" in query or "celebrity" in query:
                 return self.get_category_news("entertainment")
+            elif "science" in query:
+                return self.get_category_news("science")
             else:
                 # Extract topic from query
                 topic = self.extract_topic(query)
                 return self.search_news(topic)
                 
         except Exception as e:
-            self.logger.error(f"News fetch error: {e}")
-            return "Sorry, I couldn't fetch the news right now. Please check your internet connection."
+            self.logger.error(f"News generation error: {e}")
+            return "Sorry, I couldn't generate the news right now. Please try again."
     
     def extract_topic(self, query):
         """Extract news topic from query"""
@@ -63,258 +66,102 @@ class NewsFetcher:
         topic_words = [word for word in words if word not in words_to_remove]
         return " ".join(topic_words) if topic_words else "general"
     
-    def get_top_headlines(self, country="us"):
-        """Get top headlines"""
+    def get_top_headlines(self):
+        """Generate top headlines using Groq"""
+        current_date = datetime.now().strftime("%B %d, %Y")
+        
+        prompt = f"Generate 8 realistic top news headlines for {current_date}. Include diverse topics: politics, technology, business, health, sports, entertainment, science, and world news. Format each headline as: 1. [Headline Title] 📍 [News Source] | 🕒 [Time like '2h ago'] Make headlines current, realistic, and varied. Don't include controversial or false information."
+        
         try:
-            if self.newsapi:
-                # Use NewsAPI client
-                headlines = self.newsapi.get_top_headlines(
-                    country=country,
-                    page_size=8
-                )
-                articles = headlines.get('articles', [])
-            else:
-                # Use direct API call
-                articles = self.fetch_headlines_direct(country)
+            response = self.openai_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a professional news curator. Generate realistic, current news headlines."},
+                    {"role": "user", "content": prompt}
+                ],
+                model=self.model_name,
+                max_tokens=400,
+                temperature=0.7
+            )
             
-            if articles:
-                result = f"📰 Top Headlines ({len(articles)} articles):\\n\\n"
-                
-                for i, article in enumerate(articles, 1):
-                    title = article.get('title', 'No title')
-                    source = article.get('source', {}).get('name', 'Unknown source')
-                    published = self.format_publish_date(article.get('publishedAt', ''))
-                    
-                    result += f"{i}. {title}\\n"
-                    result += f"   📍 {source} | 🕒 {published}\\n\\n"
-                
-                return result
-            else:
-                return "No headlines available at the moment."
-                
+            result = f"📰 **Top Headlines** - {current_date}\n\n"
+            result += response.choices[0].message.content.strip()
+            
+            return result
+            
         except Exception as e:
-            self.logger.error(f"Headlines error: {e}")
-            return "Error fetching headlines. Please try again."
+            self.logger.error(f"Headlines generation error: {e}")
+            return "Error generating headlines. Please try again."
     
     def get_category_news(self, category):
-        """Get news by category"""
+        """Generate category-specific news using Groq"""
+        current_date = datetime.now().strftime("%B %d, %Y")
+        
+        category_prompts = {
+            "technology": "latest tech developments, AI breakthroughs, new gadgets, software updates, cybersecurity, and tech company news",
+            "business": "market movements, company earnings, economic indicators, mergers, startup funding, and industry trends",
+            "sports": "game results, player transfers, tournament updates, records broken, and sports business news",
+            "health": "medical breakthroughs, public health updates, new treatments, health research, and wellness trends",
+            "entertainment": "movie releases, celebrity news, music industry, streaming updates, and entertainment business",
+            "science": "research discoveries, space exploration, climate science, new studies, and scientific innovations"
+        }
+        
+        category_focus = category_prompts.get(category, "general news and current events")
+        
+        prompt = f"Generate 6 realistic {category} news articles for {current_date}. Focus on: {category_focus} Format each article as: **[Number]. [Headline]** *[News Source]* [Brief 2-sentence summary] Make articles current, informative, and realistic. Don't include false information."
+        
         try:
-            if self.newsapi:
-                news = self.newsapi.get_top_headlines(
-                    category=category,
-                    country='us',
-                    page_size=6
-                )
-                articles = news.get('articles', [])
-            else:
-                articles = self.fetch_category_direct(category)
+            response = self.openai_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": f"You are a {category} news specialist. Generate realistic, current news articles."},
+                    {"role": "user", "content": prompt}
+                ],
+                model=self.model_name,
+                max_tokens=500,
+                temperature=0.7
+            )
             
-            if articles:
-                result = f"📰 {category.title()} News:\\n\\n"
-                
-                for i, article in enumerate(articles, 1):
-                    title = article.get('title', 'No title')
-                    source = article.get('source', {}).get('name', 'Unknown source')
-                    description = article.get('description', '')
-                    
-                    result += f"{i}. {title}\\n"
-                    result += f"   📍 {source}\\n"
-                    
-                    if description:
-                        # Truncate description
-                        desc = description[:100] + "..." if len(description) > 100 else description
-                        result += f"   📝 {desc}\\n"
-                    
-                    result += "\\n"
-                
-                return result
-            else:
-                return f"No {category} news available."
-                
+            result = f"📱 **{category.title()} News** - {current_date}\n\n"
+            result += response.choices[0].message.content.strip()
+            
+            return result
+            
         except Exception as e:
             self.logger.error(f"Category news error: {e}")
-            return f"Error fetching {category} news."
+            return f"Error generating {category} news. Please try again."
     
     def search_news(self, topic):
-        """Search for news on specific topic"""
+        """Search for news on specific topic using Groq"""
+        current_date = datetime.now().strftime("%B %d, %Y")
+        
+        prompt = f"Generate 5 realistic news articles about '{topic}' for {current_date}. Format each article as: **[Number]. [Headline about {topic}]** *[News Source]* • [Time like '1h ago'] [Brief 2-sentence summary explaining the {topic} development] Make articles current, relevant to {topic}, and realistic. Don't include false information."
+        
         try:
-            if self.newsapi:
-                # Use NewsAPI client
-                news = self.newsapi.get_everything(
-                    q=topic,
-                    sort_by='relevancy',
-                    page_size=6,
-                    language='en',
-                    from_param=(datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-                )
-                articles = news.get('articles', [])
-            else:
-                # Use direct API call
-                articles = self.search_everything_direct(topic)
+            response = self.openai_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": f"You are a news researcher specializing in {topic}. Generate realistic, current news articles."},
+                    {"role": "user", "content": prompt}
+                ],
+                model=self.model_name,
+                max_tokens=450,
+                temperature=0.7
+            )
             
-            if articles:
-                result = f"📰 News about '{topic}' ({len(articles)} articles):\\n\\n"
-                
-                for i, article in enumerate(articles, 1):
-                    title = article.get('title', 'No title')
-                    source = article.get('source', {}).get('name', 'Unknown source')
-                    published = self.format_publish_date(article.get('publishedAt', ''))
-                    description = article.get('description', '')
-                    url = article.get('url', '')
-                    
-                    result += f"{i}. {title}\\n"
-                    result += f"   📍 {source} | 🕒 {published}\\n"
-                    
-                    if description:
-                        desc = description[:120] + "..." if len(description) > 120 else description
-                        result += f"   📝 {desc}\\n"
-                    
-                    result += "\\n"
-                
-                return result
-            else:
-                return f"No recent news found about '{topic}'"
-                
+            result = f"🔍 **News about '{topic}'** - {current_date}\n\n"
+            result += response.choices[0].message.content.strip()
+            
+            return result
+            
         except Exception as e:
-            self.logger.error(f"News search error: {e}")
-            return f"Error searching for news about '{topic}'"
+            self.logger.error(f"Topic search error: {e}")
+            return f"Error generating news about '{topic}'. Please try again."
     
-    def fetch_headlines_direct(self, country="us"):
-        """Fetch headlines using direct API call"""
-        if not self.api_key:
-            return []
-        
-        url = f"{self.base_url}/top-headlines"
-        params = {
-            'apiKey': self.api_key,
-            'country': country,
-            'pageSize': 8
+    def get_status(self):
+        """Get current fetcher status"""
+        return {
+            "groq_powered": True,
+            "groq_connected": self.openai_client is not None,
+            "model": self.model_name if self.openai_client else "None",
+            "api_key_set": os.getenv('GROQ_API_KEY') is not None,
+            "categories": ["headlines", "technology", "business", "sports", "health", "entertainment", "science"],
+            "features": ["search", "breaking_news", "category_news"]
         }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('articles', [])
-        else:
-            raise Exception(f"API returned status code {response.status_code}")
-    
-    def fetch_category_direct(self, category):
-        """Fetch category news using direct API call"""
-        if not self.api_key:
-            return []
-        
-        url = f"{self.base_url}/top-headlines"
-        params = {
-            'apiKey': self.api_key,
-            'category': category,
-            'country': 'us',
-            'pageSize': 6
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('articles', [])
-        else:
-            raise Exception(f"API returned status code {response.status_code}")
-    
-    def search_everything_direct(self, topic):
-        """Search everything using direct API call"""
-        if not self.api_key:
-            return []
-        
-        url = f"{self.base_url}/everything"
-        params = {
-            'apiKey': self.api_key,
-            'q': topic,
-            'sortBy': 'relevancy',
-            'pageSize': 6,
-            'language': 'en',
-            'from': (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('articles', [])
-        else:
-            raise Exception(f"API returned status code {response.status_code}")
-    
-    def format_publish_date(self, date_string):
-        """Format publication date to readable format"""
-        try:
-            if not date_string:
-                return "Unknown time"
-            
-            # Parse ISO format
-            date_obj = datetime.fromisoformat(date_string.replace('Z', '+00:00'))
-            now = datetime.now(date_obj.tzinfo)
-            
-            # Calculate time difference
-            time_diff = now - date_obj
-            
-            if time_diff.days > 0:
-                return f"{time_diff.days}d ago"
-            elif time_diff.seconds > 3600:
-                hours = time_diff.seconds // 3600
-                return f"{hours}h ago"
-            elif time_diff.seconds > 60:
-                minutes = time_diff.seconds // 60
-                return f"{minutes}m ago"
-            else:
-                return "Just now"
-                
-        except Exception:
-            return "Unknown time"
-    
-    def get_news_sources(self):
-        """Get available news sources"""
-        try:
-            if self.newsapi:
-                sources = self.newsapi.get_sources()
-                source_list = sources.get('sources', [])
-            else:
-                source_list = self.fetch_sources_direct()
-            
-            if source_list:
-                result = f"Available news sources ({len(source_list)}):\\n\\n"
-                
-                # Group by category
-                categories = {}
-                for source in source_list[:20]:  # Limit to 20 sources
-                    category = source.get('category', 'general').title()
-                    if category not in categories:
-                        categories[category] = []
-                    categories[category].append(source.get('name', 'Unknown'))
-                
-                for category, sources in categories.items():
-                    result += f"📂 {category}: {', '.join(sources)}\\n"
-                
-                return result
-            else:
-                return "No sources available."
-                
-        except Exception as e:
-            self.logger.error(f"Sources error: {e}")
-            return "Error fetching news sources."
-    
-    def fetch_sources_direct(self):
-        """Fetch sources using direct API call"""
-        if not self.api_key:
-            return []
-        
-        url = f"{self.base_url}/sources"
-        params = {
-            'apiKey': self.api_key
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('sources', [])
-        else:
-            return []
