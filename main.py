@@ -34,7 +34,7 @@ except ImportError as e:
 # Import modules with individual error handling
 modules_status = {}
 
-print("🔧 Loading Specter modules...")
+print("Loading Specter modules...")
 
 # Speech Engine
 try:
@@ -86,15 +86,6 @@ except ImportError as e:
     print(f"❌ App Launcher failed: {e}")
     AppLauncher = None
 
-# News Fetcher
-try:
-    from news_fetcher import NewsFetcher
-    modules_status['news'] = True
-    print("✅ News Fetcher loaded")
-except ImportError as e:
-    modules_status['news'] = False
-    print(f"❌ News Fetcher failed: {e}")
-    NewsFetcher = None
 
 # Calendar Manager
 try:
@@ -116,15 +107,7 @@ except ImportError as e:
     print(f"❌ System Monitor failed: {e}")
     SystemMonitor = None
 
-# Weather Engine
-try:
-    from weather import WeatherEngine
-    modules_status['weather'] = True
-    print("✅ Weather Engine loaded")
-except ImportError as e:
-    modules_status['weather'] = False
-    print(f"❌ Weather Engine failed: {e}")
-    WeatherEngine = None
+
 
 # Email Handler
 try:
