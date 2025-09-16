@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Music Player - Enhanced with Desktop App Integration and Auto-Play
+Music Player - Enhanced with Desktop App Integration, Auto-Play, and YT-DLP Streaming
 """
 
 import pygame
@@ -8,9 +8,18 @@ import webbrowser
 import os
 import subprocess
 import time
+import tempfile
+import threading
 from pathlib import Path
 from urllib.parse import quote_plus
 from utils.logger import setup_logger
+
+# YT-DLP integration for streaming
+try:
+    from yt_dlp import YoutubeDL
+    YTDLP_AVAILABLE = True
+except ImportError:
+    YTDLP_AVAILABLE = False
 
 # Browser automation for auto-play (optional)
 try:
@@ -47,6 +56,7 @@ class MusicPlayer:
         self.current_song = None
         self.is_playing = False
         self.is_paused = False
+        self.current_stream_file = None
         
         # Setup Spotify API if available
         if SPOTIFY_AVAILABLE:
@@ -60,6 +70,8 @@ class MusicPlayer:
         print("🎵 Enhanced Music Player initialized!")
         if SELENIUM_AVAILABLE:
             print("🤖 Auto-play functionality enabled!")
+        if YTDLP_AVAILABLE:
+            print("🎧 YT-DLP streaming enabled!")
         
     def setup_spotify(self):
         """Initialize Spotify client"""
@@ -122,6 +134,8 @@ class MusicPlayer:
             return self.stop_music()
         elif "pause" in command:
             return self.pause_music()
+        elif "resume" in command:
+            return self.resume_music()
         elif "local" in command:
             return self.play_local_music()
         else:
@@ -136,7 +150,7 @@ class MusicPlayer:
         return " ".join(song_words) if song_words else "popular music"
     
     def play_music_smart(self, song_name):
-        """Smart music playing with desktop apps and auto-play"""
+        """Smart music playing with multiple fallbacks"""
         try:
             print(f"🎵 Searching for: '{song_name}'")
             
@@ -148,7 +162,9 @@ class MusicPlayer:
             
             # Priority 2: Spotify Desktop App (manual)
             elif self.apps['spotify_installed']:
-                return self.play_spotify_desktop(song_name)
+                result = self.play_spotify_desktop(song_name)
+                if result:
+                    return result
             
             # Priority 3: Auto-play Spotify Web
             if SELENIUM_AVAILABLE:
@@ -158,7 +174,15 @@ class MusicPlayer:
             
             # Priority 4: Auto-play YouTube
             if SELENIUM_AVAILABLE:
-                return self.autoplay_youtube(song_name)
+                result = self.autoplay_youtube(song_name)
+                if result:
+                    return result
+            
+            # Priority 5: YT-DLP Streaming (NEW!)
+            if YTDLP_AVAILABLE:
+                result = self.stream_with_ytdlp(song_name)
+                if result:
+                    return result
             
             # Fallback: Manual web browsers
             return self.play_web_fallback(song_name)
@@ -166,6 +190,154 @@ class MusicPlayer:
         except Exception as e:
             self.logger.error(f"Smart music play error: {e}")
             return f"Error playing '{song_name}'. Check your internet connection."
+    
+    def stream_with_ytdlp(self, song_name):
+        """Stream audio using YT-DLP without downloading files"""
+        if not YTDLP_AVAILABLE or not self.pygame_available:
+            return None
+            
+        try:
+            print("🎧 Streaming with YT-DLP...")
+            
+            # Search for the song on YouTube
+            search_result = self.search_youtube(song_name)
+            if not search_result:
+                return None
+            
+            # Get streaming URL
+            stream_url = self.get_stream_url(search_result['url'])
+            if not stream_url:
+                return None
+            
+            # Stream and play the audio
+            return self.play_stream(stream_url, search_result['title'])
+            
+        except Exception as e:
+            self.logger.error(f"YT-DLP streaming error: {e}")
+            return None
+    
+    def search_youtube(self, query):
+        """Search YouTube and return first result info"""
+        try:
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "quiet": True,
+                "noplaylist": True,
+                "default_search": "ytsearch1:",
+                "extract_flat": False,
+            }
+            
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+                
+                if info and 'entries' in info and len(info['entries']) > 0:
+                    entry = info['entries'][0]
+                    return {
+                        'url': entry.get('webpage_url', ''),
+                        'title': entry.get('title', 'Unknown'),
+                        'duration': entry.get('duration', 0),
+                        'uploader': entry.get('uploader', 'Unknown')
+                    }
+                    
+        except Exception as e:
+            self.logger.error(f"YouTube search error: {e}")
+            
+        return None
+    
+    def get_stream_url(self, youtube_url):
+        """Get direct streaming URL from YouTube video"""
+        try:
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "quiet": True,
+                "noplaylist": True,
+            }
+            
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(youtube_url, download=False)
+                
+                # Get the direct URL for the best audio format
+                if 'url' in info:
+                    return info['url']
+                elif 'formats' in info:
+                    # Find best audio format
+                    audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none']
+                    if audio_formats:
+                        # Sort by quality and get the best
+                        audio_formats.sort(key=lambda x: x.get('abr', 0), reverse=True)
+                        return audio_formats[0]['url']
+                        
+        except Exception as e:
+            self.logger.error(f"Stream URL extraction error: {e}")
+            
+        return None
+    
+    def play_stream(self, stream_url, title):
+        """Play audio stream using pygame"""
+        try:
+            # Stop any currently playing music
+            if self.is_playing:
+                pygame.mixer.music.stop()
+            
+            # Create a temporary file for the stream
+            # We'll stream it in chunks to avoid downloading the whole file
+            temp_file = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+            self.current_stream_file = temp_file.name
+            temp_file.close()
+            
+            # Start streaming in a separate thread
+            stream_thread = threading.Thread(
+                target=self.stream_to_file, 
+                args=(stream_url, self.current_stream_file)
+            )
+            stream_thread.daemon = True
+            stream_thread.start()
+            
+            # Wait a bit for initial buffering
+            time.sleep(3)
+            
+            # Start playing
+            pygame.mixer.music.load(self.current_stream_file)
+            pygame.mixer.music.play()
+            
+            self.current_song = title
+            self.is_playing = True
+            self.is_paused = False
+            
+            return f"🎧 Now streaming: '{title}'"
+            
+        except Exception as e:
+            self.logger.error(f"Stream playback error: {e}")
+            return None
+    
+    def stream_to_file(self, stream_url, temp_file):
+        """Stream audio data to temporary file in chunks"""
+        try:
+            import urllib.request
+            
+            # Open the stream
+            response = urllib.request.urlopen(stream_url)
+            
+            # Stream in 64KB chunks
+            chunk_size = 65536
+            with open(temp_file, 'wb') as f:
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    
+        except Exception as e:
+            self.logger.error(f"Streaming error: {e}")
+    
+    def cleanup_stream_file(self):
+        """Clean up temporary stream file"""
+        if self.current_stream_file and os.path.exists(self.current_stream_file):
+            try:
+                os.unlink(self.current_stream_file)
+                self.current_stream_file = None
+            except:
+                pass
     
     def play_spotify_desktop_with_api(self, song_name):
         """Play via Spotify desktop app using API"""
@@ -405,27 +577,49 @@ class MusicPlayer:
         try:
             if self.pygame_available:
                 pygame.mixer.music.stop()
+            
+            # Clean up stream file
+            self.cleanup_stream_file()
+            
             self.is_playing = False
-            return "🛑 Music stopped (local). For web/app music, use the app controls."
+            self.is_paused = False
+            return "🛑 Music stopped (local/stream). For web/app music, use the app controls."
         except:
             return "No local music to stop."
     
     def pause_music(self):
         """Pause music"""
         try:
-            if self.pygame_available and self.is_playing:
+            if self.pygame_available and self.is_playing and not self.is_paused:
                 pygame.mixer.music.pause()
                 self.is_paused = True
-                return "⏸️ Local music paused."
+                return "⏸️ Music paused."
             else:
-                return "No local music playing to pause."
+                return "No music playing to pause."
         except:
             return "Error pausing music."
     
+    def resume_music(self):
+        """Resume paused music"""
+        try:
+            if self.pygame_available and self.is_paused:
+                pygame.mixer.music.unpause()
+                self.is_paused = False
+                return "▶️ Music resumed."
+            else:
+                return "No paused music to resume."
+        except:
+            return "Error resuming music."
+    
     def get_installation_help(self):
-        """Get help for enabling auto-play features"""
+        """Get help for enabling enhanced features"""
         help_text = """
 🤖 ENHANCED MUSIC FEATURES SETUP
+
+🎧 For YT-DLP Streaming (NEW!):
+   pip install yt-dlp
+   
+   This enables streaming without downloads!
 
 🔧 For Auto-Play Functionality:
    pip install selenium
@@ -441,8 +635,22 @@ class MusicPlayer:
    • YouTube Music: Use Chrome browser
    
 ⚡ With these installed, Jarvis will:
+   • Stream music directly from YouTube
    • Auto-click play buttons
    • Open desktop apps directly
    • Play the first search result automatically
         """
         return help_text
+    
+    def get_status(self):
+        """Get current music player status"""
+        return {
+            'is_playing': self.is_playing,
+            'is_paused': self.is_paused,
+            'current_song': str(self.current_song) if self.current_song else None,
+            'pygame_available': self.pygame_available,
+            'ytdlp_available': YTDLP_AVAILABLE,
+            'selenium_available': SELENIUM_AVAILABLE,
+            'spotify_available': SPOTIFY_AVAILABLE,
+            'apps_detected': self.apps
+        }

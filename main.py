@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Jarvis AI Agent - Complete Main Entry Point
+Specter AI Agent - Complete Main Entry Point
 Hackathon Version with Full Module Integration and Dependency Handling
 """
 
@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).parent / "utils"))
 # Setup basic logging first (in case utils.logger fails)
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-basic_logger = logging.getLogger("jarvis")
+basic_logger = logging.getLogger("Specter")
 
 # Try to import utils modules first
 try:
@@ -34,7 +34,7 @@ except ImportError as e:
 # Import modules with individual error handling
 modules_status = {}
 
-print("🔧 Loading Jarvis modules...")
+print("🔧 Loading Specter modules...")
 
 # Speech Engine
 try:
@@ -137,11 +137,11 @@ except ImportError as e:
     EmailHandler = None
 
 
-class JarvisAgent:
+class SpecterAgent:
     def __init__(self):
-        """Initialize Jarvis with available modules"""
+        """Initialize Specter with available modules"""
         print("\n" + "=" * 60)
-        print("🤖 INITIALIZING JARVIS AI AGENT")
+        print("🤖 INITIALIZING Specter AI AGENT")
         print("=" * 60)
 
         self.logger = logger
@@ -154,7 +154,7 @@ class JarvisAgent:
         available_count = sum(modules_status.values())
         total_count = len(modules_status)
 
-        print(f"\n🎉 Jarvis initialized with {available_count}/{total_count} modules!")
+        print(f"\n🎉 Specter initialized with {available_count}/{total_count} modules!")
         if available_count < total_count:
             print("💡 Run 'pip install pygame newsapi-python' to enable all features")
 
@@ -263,7 +263,7 @@ class JarvisAgent:
     def listen_and_respond(self):
         """Main interaction loop"""
         print("\n" + "=" * 60)
-        print("🎤 JARVIS AI AGENT - READY TO ASSIST")
+        print("🎤 Specter AI AGENT - READY TO ASSIST")
         print("=" * 60)
         print("💡 Available commands:")
         print("   • Type 'help' for full command list")
@@ -301,10 +301,10 @@ class JarvisAgent:
                 response = self.process_command(user_input)
 
                 # Display response
-                print(f"\n🤖 Jarvis: {response}")
+                print(f"\n🤖 Specter: {response}")
 
             except KeyboardInterrupt:
-                print("\n\n👋 Jarvis shutting down...")
+                print("\n\n👋 Specter shutting down...")
                 break
             except Exception as e:
                 self.logger.error(f"Main loop error: {e}")
@@ -385,13 +385,13 @@ class JarvisAgent:
     def fallback_conversation(self, command):
         """Basic conversation when AI modules aren't available"""
         responses = {
-            'hello': "Hello! I'm Jarvis, your AI assistant. How can I help you today?",
+            'hello': "Hello! I'm Specter, your AI assistant. How can I help you today?",
             'hi': "Hi there! What can I do for you?",
             'how are you': "I'm doing well and ready to help! What would you like to do?",
             'what can you do': "I can help with files, launching apps, system info, and more! Type 'help' to see all commands.",
             'thank you': "You're welcome! I'm always here to help.",
             'thanks': "No problem! Anything else I can help with?",
-            'who are you': "I'm Jarvis, your personal AI assistant built for the hackathon!",
+            'who are you': "I'm Specter, your personal AI assistant built for the hackathon!",
         }
 
         command_lower = command.lower()
@@ -403,7 +403,7 @@ class JarvisAgent:
 
     def show_help(self):
         """Show available commands based on loaded modules"""
-        help_text = "\n🤖 JARVIS AI AGENT - AVAILABLE COMMANDS\n"
+        help_text = "\n🤖 Specter AI AGENT - AVAILABLE COMMANDS\n"
         help_text += "=" * 50 + "\n"
 
         if self.music:
@@ -451,14 +451,14 @@ class JarvisAgent:
         help_text += "   • help - Show this help\n"
         help_text += "   • status - Module status\n"
         help_text += "   • install - Installation help\n"
-        help_text += "   • quit - Exit Jarvis\n"
+        help_text += "   • quit - Exit Specter\n"
         help_text += "=" * 50
 
         print(help_text)
 
     def show_status(self):
         """Show module status"""
-        print("\n📊 JARVIS MODULE STATUS")
+        print("\n📊 Specter MODULE STATUS")
         print("=" * 30)
 
         status_map = {
@@ -518,7 +518,7 @@ class JarvisAgent:
 
     def shutdown(self):
         """Graceful shutdown"""
-        print("\n👋 Thank you for using Jarvis!")
+        print("\n👋 Thank you for using Specter!")
         print("🎯 Hackathon version - Built with ❤️")
 
         # Cleanup
@@ -528,14 +528,14 @@ class JarvisAgent:
         except:
             pass
 
-        print("🔚 Jarvis shutting down...")
+        print("🔚 Specter shutting down...")
 
 
 def main():
     """Main function"""
     try:
-        jarvis = JarvisAgent()
-        jarvis.listen_and_respond()
+        Specter = SpecterAgent()
+        Specter.listen_and_respond()
 
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user. Goodbye!")
