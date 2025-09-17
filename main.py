@@ -347,12 +347,43 @@ class SpecterAgent:
                 else:
                     return "📧 Email module not available"
 
-            # System commands
-            elif any(word in command_lower for word in ['system', 'performance', 'cpu', 'memory', 'disk']):
+                    # System commands - FIXED VERSION
+            elif any(word in command_lower for word in ['system', 'performance', 'cpu', 'memory', 'disk', 'processes', 'analyze', 'monitor']):
                 if self.system:
-                    return self.system.get_system_info()
+                    # Route to specific system methods based on request
+                    if 'quick status' in command_lower or (command_lower.strip() == 'status' and any(w in command_lower for w in ['system', 'cpu', 'memory'])):
+                        return self.system.get_quick_status()
+                    elif 'top processes' in command_lower or 'processes running' in command_lower or 'running processes' in command_lower:
+                        return self.system.get_top_processes(limit=10)
+                    elif 'performance' in command_lower and ('analyze' in command_lower or 'analysis' in command_lower):
+                        # Try AI analysis for performance requests
+                        try:
+                            return self.system.analyze_system_with_ai()
+                        except:
+                            return f"{self.system.get_performance_status()}\n\n{self.system.get_system_alerts()}"
+                    elif 'analyze' in command_lower or 'analysis' in command_lower:
+                        # Try AI analysis if available
+                        try:
+                            return self.system.analyze_system_with_ai()  
+                        except:
+                            return f"{self.system.get_performance_status()}\n\n{self.system.get_system_alerts()}"
+                    elif 'performance' in command_lower:
+                        return self.system.get_performance_status(detailed=True)
+                    elif 'alerts' in command_lower or 'warnings' in command_lower or 'health' in command_lower:
+                        return self.system.get_system_alerts()
+                    elif 'storage' in command_lower or 'disk' in command_lower:
+                        return self.system.get_storage_status()
+                    elif 'network' in command_lower:
+                        return self.system.get_network_status()
+                    elif 'battery' in command_lower:
+                        return self.system.get_battery_status()
+                    elif 'temperature' in command_lower or 'temp' in command_lower:
+                        return self.system.get_temperature_status()
+                    else:
+                        # Default to system overview for general system info requests
+                        return self.system.get_system_info()
                 else:
-                    return "📊 System monitor module not available"
+                    return "System monitor module not available"
 
             # Conversation (default)
             else:

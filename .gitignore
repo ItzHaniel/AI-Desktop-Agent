@@ -68,3 +68,13 @@ Thumbs.db
 *.yml
 config.json
 secrets.json
+
+# Logs 
+data/
+
+# music files
+temp_music/
+
+# pycache
+modules/__pycache__
+modules/__pycache__/
