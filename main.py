@@ -638,7 +638,6 @@ class SpecterAgent:
                     return self.system.get_system_info()
                 else:
                     return "📊 System monitor module not available"
-
             else:
                 # Default to conversation
                 if self.conversation:
@@ -777,6 +776,17 @@ class SpecterAgent:
                 print(f"❌ {name}")
 
         print(f"\n📊 {available}/{len(status_map)} modules active")
+
+        if self.speech:
+            print("\n🎤 Speech Engine Details:")
+            try:
+                speech_status = self.speech.get_status()
+                print(f"   🔊 TTS Available: {speech_status['tts_available']}")
+                print(f"   🗣️ TTS Enabled: {speech_status['tts_enabled']}")
+                print(f"   🎧 Microphone: {speech_status['speech_recognition_available']}")
+                print(f"   🎙️ Voice Mode: {'Active' if self.voice_mode else 'Inactive'}")
+            except Exception as e:
+                print(f"   ⚠️ Status check failed: {e}")
 
         if self.speech:
             print("\n🎤 Speech Engine Details:")
