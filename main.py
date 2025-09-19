@@ -86,6 +86,25 @@ except ImportError as e:
     print(f"❌ App Launcher failed: {e}")
     AppLauncher = None
 
+# News Fetcher - FIXED IMPORT
+try:
+    from news_fetcher import NewsFetcher
+    modules_status['news'] = True
+    print("✅ News Fetcher loaded")
+except ImportError as e:
+    modules_status['news'] = False
+    print(f"❌ News Fetcher failed: {e}")
+    NewsFetcher = None
+
+# Weather Engine - FIXED IMPORT
+try:
+    from weather import WeatherEngine
+    modules_status['weather'] = True
+    print("✅ Weather Engine loaded")
+except ImportError as e:
+    modules_status['weather'] = False
+    print(f"❌ Weather Engine failed: {e}")
+    WeatherEngine = None
 
 # Calendar Manager
 try:
@@ -106,8 +125,6 @@ except ImportError as e:
     modules_status['system'] = False
     print(f"❌ System Monitor failed: {e}")
     SystemMonitor = None
-
-
 
 # Email Handler
 try:
@@ -193,7 +210,7 @@ class SpecterAgent:
         else:
             self.launcher = None
 
-        # Initialize News Fetcher
+        # Initialize News Fetcher - FIXED
         if modules_status.get('news') and NewsFetcher:
             try:
                 self.news = NewsFetcher()
@@ -202,6 +219,16 @@ class SpecterAgent:
                 self.news = None
         else:
             self.news = None
+
+        # Initialize Weather Engine - FIXED
+        if modules_status.get('weather') and WeatherEngine:
+            try:
+                self.weather = WeatherEngine()
+            except Exception as e:
+                print(f"⚠️ Weather Engine init failed: {e}")
+                self.weather = None
+        else:
+            self.weather = None
 
         # Initialize Calendar Manager
         if modules_status.get('calendar') and CalendarManager:
@@ -222,16 +249,6 @@ class SpecterAgent:
                 self.system = None
         else:
             self.system = None
-
-        # Initialize Weather Engine
-        if modules_status.get('weather') and WeatherEngine:
-            try:
-                self.weather = WeatherEngine()
-            except Exception as e:
-                print(f"⚠️ Weather Engine init failed: {e}")
-                self.weather = None
-        else:
-            self.weather = None
 
         # Initialize Email Handler
         if modules_status.get('email') and EmailHandler:
@@ -324,14 +341,14 @@ class SpecterAgent:
                 if self.news:
                     return self.news.get_news(command)
                 else:
-                    return "📰 News module not available. Install newsapi: pip install newsapi-python"
+                    return "📰 News module not available. Configure GROQ_API_KEY in your .env file"
 
             # Weather commands
             elif any(word in command_lower for word in ['weather', 'temperature', 'forecast']):
                 if self.weather:
                     return self.weather.get_weather(command)
                 else:
-                    return "🌤️ Weather module not available"
+                    return "🌤️ Weather module not available. Configure GROQ_API_KEY in your .env file"
 
             # Calendar commands
             elif any(word in command_lower for word in ['calendar', 'schedule', 'meeting', 'reminder', 'appointment']):
@@ -347,7 +364,7 @@ class SpecterAgent:
                 else:
                     return "📧 Email module not available"
 
-                    # System commands - FIXED VERSION
+            # System commands - FIXED VERSION
             elif any(word in command_lower for word in ['system', 'performance', 'cpu', 'memory', 'disk', 'processes', 'analyze', 'monitor']):
                 if self.system:
                     # Route to specific system methods based on request
@@ -383,7 +400,7 @@ class SpecterAgent:
                         # Default to system overview for general system info requests
                         return self.system.get_system_info()
                 else:
-                    return "System monitor module not available"
+                    return "📊 System monitor module not available"
 
             # Conversation (default)
             else:
@@ -413,55 +430,55 @@ class SpecterAgent:
             if key in command_lower:
                 return response
 
-        return "I understand you're trying to chat! For full AI conversation, configure OpenAI or Gemini API keys in your .env file. For now, I can help with specific tasks - type 'help' to see what I can do!"
+        return "I understand you're trying to chat! For full AI conversation, configure GROQ_API_KEY in your .env file. For now, I can help with specific tasks - type 'help' to see what I can do!"
 
     def show_help(self):
         """Show available commands based on loaded modules"""
-        help_text = "\n🤖 Specter AI AGENT - AVAILABLE COMMANDS\n"
+        help_text = "\n Specter AI AGENT - AVAILABLE COMMANDS\n"
         help_text += "=" * 50 + "\n"
 
         if self.music:
-            help_text += "\n🎵 MUSIC (Available):\n"
+            help_text += "\n MUSIC (Available):\n"
             help_text += "   • play [song name] - Play music\n"
             help_text += "   • stop music - Stop playback\n"
         else:
-            help_text += "\n🎵 MUSIC (Unavailable - install pygame)\n"
+            help_text += "\n MUSIC (Unavailable - install pygame)\n"
 
         if self.file_manager:
-            help_text += "\n📁 FILES (Available):\n"
+            help_text += "\n FILES (Available):\n"
             help_text += "   • find [filename] - Search files\n"
             help_text += "   • organize files - Clean downloads\n"
         else:
-            help_text += "\n📁 FILES (Unavailable)\n"
+            help_text += "\n FILES (Unavailable)\n"
 
         if self.launcher:
-            help_text += "\n🚀 APPS (Available):\n"
+            help_text += "\n APPS (Available):\n"
             help_text += "   • open [app name] - Launch apps\n"
             help_text += "   • open notepad - Launch specific apps\n"
         else:
-            help_text += "\n🚀 APPS (Unavailable)\n"
+            help_text += "\n APPS (Unavailable)\n"
 
         if self.news:
-            help_text += "\n📰 NEWS (Available):\n"
+            help_text += "\n NEWS (Available):\n"
             help_text += "   • news - Get headlines\n"
             help_text += "   • tech news - Category news\n"
         else:
-            help_text += "\n📰 NEWS (Unavailable - install newsapi-python)\n"
+            help_text += "\n NEWS (Unavailable - configure GROQ_API_KEY)\n"
 
         if self.weather:
-            help_text += "\n🌤️ WEATHER (Available):\n"
+            help_text += "\n WEATHER (Available):\n"
             help_text += "   • weather - Current weather\n"
             help_text += "   • weather in [city] - City weather\n"
         else:
-            help_text += "\n🌤️ WEATHER (Unavailable)\n"
+            help_text += "\nWEATHER (Unavailable - configure GROQ_API_KEY)\n"
 
         if self.system:
-            help_text += "\n📊 SYSTEM (Available):\n"
+            help_text += "\nSYSTEM (Available):\n"
             help_text += "   • system status - System info\n"
         else:
-            help_text += "\n📊 SYSTEM (Unavailable)\n"
+            help_text += "\n SYSTEM (Unavailable)\n"
 
-        help_text += "\n💬 GENERAL:\n"
+        help_text += "\nGENERAL:\n"
         help_text += "   • help - Show this help\n"
         help_text += "   • status - Module status\n"
         help_text += "   • install - Installation help\n"
@@ -472,31 +489,31 @@ class SpecterAgent:
 
     def show_status(self):
         """Show module status"""
-        print("\n📊 Specter MODULE STATUS")
+        print("\nSpecter MODULE STATUS")
         print("=" * 30)
 
         status_map = {
-            'speech': ('🎤 Speech Engine', self.speech),
-            'conversation': ('💬 Conversation', self.conversation),
-            'file_manager': ('📁 File Manager', self.file_manager),
-            'music': ('🎵 Music Player', self.music),
-            'launcher': ('🚀 App Launcher', self.launcher),
-            'news': ('📰 News Fetcher', self.news),
-            'calendar': ('📅 Calendar', self.calendar),
-            'system': ('📊 System Monitor', self.system),
-            'weather': ('🌤️ Weather', self.weather),
-            'email': ('📧 Email Handler', self.email)
+            'speech': ('Speech Engine', self.speech),
+            'conversation': ('Conversation', self.conversation),
+            'file_manager': ('File Manager', self.file_manager),
+            'music': ('Music Player', self.music),
+            'launcher': ('App Launcher', self.launcher),
+            'news': (' News Fetcher', self.news),
+            'weather': (' Weather Engine', self.weather),
+            'calendar': (' Calendar', self.calendar),
+            'system': (' System Monitor', self.system),
+            'email': (' Email Handler', self.email)
         }
 
         available = 0
         for key, (name, module) in status_map.items():
             if module:
-                print(f"✅ {name}")
+                print(f"{name}")
                 available += 1
             else:
-                print(f"❌ {name}")
+                print(f"{name}")
 
-        print(f"\n📈 {available}/{len(status_map)} modules active")
+        print(f"\n{available}/{len(status_map)} modules active")
 
         if self.system:
             try:
@@ -515,25 +532,24 @@ class SpecterAgent:
         print()
 
         if not self.music:
-            print("🎵 For Music Player:")
+            print("For Music Player:")
             print("   pip install pygame")
             print()
 
-        if not self.news:
-            print("📰 For News Fetcher:")
-            print("   pip install newsapi-python")
-            print()
-
-        print("🔑 For full AI features, add to .env file:")
-        print("   OPENAI_API_KEY=your_key_here")
-        print("   NEWS_API_KEY=your_news_key")
+        print("For AI features (News & Weather), add to .env file:")
+        print("   GROQ_API_KEY=your_groq_key_here")
+        print("   Get free API key: https://console.groq.com/keys")
+        print()
+        
+        print("For other features, add to .env file:")
+        print("   OPENAI_API_KEY=your_openai_key")
         print("   WEATHER_API_KEY=your_weather_key")
         print("=" * 30)
 
     def shutdown(self):
         """Graceful shutdown"""
         print("\n👋 Thank you for using Specter!")
-        print("🎯 Hackathon version - Built with ❤️")
+        print("Hackathon version - Built with")
 
         # Cleanup
         try:
@@ -542,7 +558,7 @@ class SpecterAgent:
         except:
             pass
 
-        print("🔚 Specter shutting down...")
+        print("Specter shutting down...")
 
 
 def main():
@@ -554,7 +570,7 @@ def main():
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user. Goodbye!")
     except Exception as e:
-        print(f"❌ Fatal error: {str(e)}")
+        print(f"Fatal error: {str(e)}")
         return 1
 
     return 0

@@ -3,7 +3,7 @@
 Weather Engine - Groq AI Powered Version
 Uses your existing Groq API to generate weather information
 """
-
+#weather.py
 import openai
 import os
 from datetime import datetime, timedelta
@@ -40,6 +40,10 @@ class WeatherEngine:
             
             if "forecast" in query.lower():
                 return self.get_weather_forecast(location)
+            elif "hourly" in query.lower():
+                return self.get_hourly_forecast(location)
+            elif "alert" in query.lower():
+                return self.get_weather_alerts(location)
             else:
                 return self.get_current_weather(location)
                 
@@ -49,7 +53,7 @@ class WeatherEngine:
     
     def extract_location(self, query):
         """Extract location from query"""
-        words_to_remove = ["weather", "in", "at", "for", "what's", "the", "like", "get", "tell", "me", "forecast"]
+        words_to_remove = ["weather", "in", "at", "for", "what's", "the", "like", "get", "tell", "me", "forecast", "hourly", "alert"]
         words = query.lower().split()
         location_words = [word for word in words if word not in words_to_remove]
         
@@ -120,6 +124,35 @@ class WeatherEngine:
             self.logger.error(f"Weather forecast error: {e}")
             return f"Error generating forecast for {city}. Please try again."
     
+    def get_hourly_forecast(self, city):
+        """Generate hourly weather forecast using Groq"""
+        current_time = datetime.now().strftime("%I:%M %p")
+        current_date = datetime.now().strftime("%B %d, %Y")
+        
+        prompt = f"Generate a 12-hour weather forecast for {city} starting from {current_time} on {current_date}. Show weather conditions, temperature, and precipitation chance for each 2-hour interval. Format clearly with times and weather emojis."
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": f"You are providing hourly weather forecasts for {city}. Be specific with times and realistic weather patterns."},
+                    {"role": "user", "content": prompt}
+                ],
+                model=self.model_name,
+                max_tokens=400,
+                temperature=0.7
+            )
+            
+            result = f"⏰ **12-Hour Forecast for {city}**\n"
+            result += f"Starting: {current_time}, {current_date}\n"
+            result += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            result += response.choices[0].message.content.strip()
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Hourly forecast error: {e}")
+            return f"Error generating hourly forecast for {city}."
+    
     def get_weather_advice(self, city):
         """Generate weather advice using Groq"""
         try:
@@ -168,35 +201,6 @@ class WeatherEngine:
         except Exception as e:
             self.logger.error(f"Weather alerts error: {e}")
             return f"Error generating weather alerts for {city}."
-    
-    def get_hourly_forecast(self, city):
-        """Generate hourly weather forecast using Groq"""
-        current_time = datetime.now().strftime("%I:%M %p")
-        current_date = datetime.now().strftime("%B %d, %Y")
-        
-        prompt = f"Generate a 12-hour weather forecast for {city} starting from {current_time} on {current_date}. Show weather conditions, temperature, and precipitation chance for each 2-hour interval. Format clearly with times and weather emojis."
-        
-        try:
-            response = self.openai_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": f"You are providing hourly weather forecasts for {city}. Be specific with times and realistic weather patterns."},
-                    {"role": "user", "content": prompt}
-                ],
-                model=self.model_name,
-                max_tokens=400,
-                temperature=0.7
-            )
-            
-            result = f"⏰ **12-Hour Forecast for {city}**\n"
-            result += f"Starting: {current_time}, {current_date}\n"
-            result += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            result += response.choices[0].message.content.strip()
-            
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"Hourly forecast error: {e}")
-            return f"Error generating hourly forecast for {city}."
     
     def get_status(self):
         """Get current weather engine status"""

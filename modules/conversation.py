@@ -2,6 +2,7 @@
 """
 Conversation Engine - Simple Groq Migration (using OpenAI compatibility)
 """
+#conversation.py
 
 import openai  # Keep using openai library
 import os
