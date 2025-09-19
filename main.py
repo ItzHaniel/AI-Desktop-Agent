@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Specter AI Agent - Complete Main Entry Point
-Hackathon Version with Full Module Integration and Dependency Handling
+Merged: Voice Input (STT), Text-to-Speech (TTS), Hands-free Email, Expanded File Ops Help
 """
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
 import sys
@@ -21,7 +23,8 @@ basic_logger = logging.getLogger("Specter")
 
 # Try to import utils modules first
 try:
-    from config import Config
+    # Some repos export Configp; keep original contract
+    from config import Configp as Config
     from logger import setup_logger
     logger = setup_logger()
     CONFIG_AVAILABLE = True
@@ -34,13 +37,13 @@ except ImportError as e:
 # Import modules with individual error handling
 modules_status = {}
 
-print("Loading Specter modules...")
+print("🔧 Loading Specter modules...")
 
 # Speech Engine
 try:
     from speech_engine import SpeechEngine
     modules_status['speech'] = True
-    print("✅ Speech Engine loaded")
+    print("✅ Enhanced Speech Engine loaded")
 except ImportError as e:
     modules_status['speech'] = False
     print(f"❌ Speech Engine failed: {e}")
@@ -86,6 +89,15 @@ except ImportError as e:
     print(f"❌ App Launcher failed: {e}")
     AppLauncher = None
 
+# News Fetcher
+try:
+    from news_fetcher import NewsFetcher
+    modules_status['news'] = True
+    print("✅ News Fetcher loaded")
+except ImportError as e:
+    modules_status['news'] = False
+    print(f"❌ News Fetcher failed: {e}")
+    NewsFetcher = None
 
 # Calendar Manager
 try:
@@ -107,7 +119,15 @@ except ImportError as e:
     print(f"❌ System Monitor failed: {e}")
     SystemMonitor = None
 
-
+# Weather Engine
+try:
+    from weather import WeatherEngine
+    modules_status['weather'] = True
+    print("✅ Weather Engine loaded")
+except ImportError as e:
+    modules_status['weather'] = False
+    print(f"❌ Weather Engine failed: {e}")
+    WeatherEngine = None
 
 # Email Handler
 try:
@@ -128,7 +148,10 @@ class SpecterAgent:
         print("=" * 60)
 
         self.logger = logger
-        self.config = Config() if CONFIG_AVAILABLE else None
+        self.config = Config() if CONFIG_AVAILABLE and Config else None
+
+        # Voice input mode flag
+        self.voice_mode = False
 
         # Initialize available modules
         self.initialize_modules()
@@ -139,21 +162,22 @@ class SpecterAgent:
 
         print(f"\n🎉 Specter initialized with {available_count}/{total_count} modules!")
         if available_count < total_count:
-            print("💡 Run 'pip install pygame newsapi-python' to enable all features")
+            print("💡 Run 'pip install pygame newsapi-python SpeechRecognition pyttsx3' to enable all features")
 
     def initialize_modules(self):
         """Initialize all available modules"""
-        # Initialize Speech Engine
+        # Speech Engine (TTS enabled by default)
         if modules_status.get('speech') and SpeechEngine:
             try:
-                self.speech = SpeechEngine()
+                self.speech = SpeechEngine(tts_enabled=True)
+                print("🎤 Speech Engine initialized (TTS enabled, STT ready)")
             except Exception as e:
                 print(f"⚠️ Speech Engine init failed: {e}")
                 self.speech = None
         else:
             self.speech = None
 
-        # Initialize Conversation Engine
+        # Conversation Engine
         if modules_status.get('conversation') and ConversationEngine:
             try:
                 self.conversation = ConversationEngine()
@@ -163,7 +187,7 @@ class SpecterAgent:
         else:
             self.conversation = None
 
-        # Initialize File Manager
+        # File Manager
         if modules_status.get('file_manager') and FileManager:
             try:
                 self.file_manager = FileManager()
@@ -173,7 +197,7 @@ class SpecterAgent:
         else:
             self.file_manager = None
 
-        # Initialize Music Player
+        # Music Player
         if modules_status.get('music') and MusicPlayer:
             try:
                 self.music = MusicPlayer()
@@ -183,7 +207,7 @@ class SpecterAgent:
         else:
             self.music = None
 
-        # Initialize App Launcher
+        # App Launcher
         if modules_status.get('launcher') and AppLauncher:
             try:
                 self.launcher = AppLauncher()
@@ -193,7 +217,7 @@ class SpecterAgent:
         else:
             self.launcher = None
 
-        # Initialize News Fetcher
+        # News Fetcher
         if modules_status.get('news') and NewsFetcher:
             try:
                 self.news = NewsFetcher()
@@ -203,7 +227,7 @@ class SpecterAgent:
         else:
             self.news = None
 
-        # Initialize Calendar Manager
+        # Calendar Manager
         if modules_status.get('calendar') and CalendarManager:
             try:
                 self.calendar = CalendarManager()
@@ -213,7 +237,7 @@ class SpecterAgent:
         else:
             self.calendar = None
 
-        # Initialize System Monitor
+        # System Monitor
         if modules_status.get('system') and SystemMonitor:
             try:
                 self.system = SystemMonitor()
@@ -223,7 +247,7 @@ class SpecterAgent:
         else:
             self.system = None
 
-        # Initialize Weather Engine
+        # Weather Engine
         if modules_status.get('weather') and WeatherEngine:
             try:
                 self.weather = WeatherEngine()
@@ -233,7 +257,7 @@ class SpecterAgent:
         else:
             self.weather = None
 
-        # Initialize Email Handler
+        # Email Handler
         if modules_status.get('email') and EmailHandler:
             try:
                 self.email = EmailHandler()
@@ -243,20 +267,128 @@ class SpecterAgent:
         else:
             self.email = None
 
+    def get_voice_input(self):
+        """Get voice input from user"""
+        if not self.speech or not getattr(self.speech, "microphone", None):
+            print("❌ Microphone not available for voice input")
+            return None
+
+        try:
+            print("\n🎤 Voice input mode - Speak your command...")
+            voice_text = self.speech.listen(timeout=10, phrase_limit=15)
+            if voice_text and voice_text.strip():
+                print(f"🎧 Voice input received: '{voice_text}'")
+                return voice_text.strip()
+            else:
+                print("⚠️ No voice input detected")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Voice input error: {e}")
+            print(f"❌ Voice input failed: {e}")
+            return None
+
+    # ===== Voice helpers for hands-free email =====
+    def ask_voice(self, prompt, timeout=12, phrase_limit=12, required=True):
+        """Speak a prompt and capture a short voice reply."""
+        if self.speech and getattr(self.speech, "tts_enabled", False):
+            self.speech.speak_async(prompt)
+        print(f"🗣️ {prompt}")
+
+        answer = self.speech.listen(timeout=timeout, phrase_limit=phrase_limit) if (self.speech and getattr(self.speech, "microphone", None)) else ""
+        answer = (answer or "").strip()
+        if answer:
+            return answer
+
+        if required:
+            reprompt = "Please repeat."
+            if self.speech and self.speech.tts_enabled:
+                self.speech.speak_async(reprompt)
+            print(f"🗣️ {reprompt}")
+            answer2 = self.speech.listen(timeout=timeout, phrase_limit=phrase_limit) if (self.speech and self.speech.microphone) else ""
+            return (answer2 or "").strip() or None
+        return None
+
+    def confirm_voice(self, summary, timeout=8):
+        """Confirm with a short yes/no by voice (falls back to text)."""
+        if self.speech and getattr(self.speech, "tts_enabled", False):
+            self.speech.speak_async(summary + " Please say yes or no.")
+        print(f"❓ {summary} (say yes/no)")
+        reply = ""
+        if self.voice_mode and self.speech and getattr(self.speech, "microphone", None):
+            reply = (self.speech.listen(timeout=timeout, phrase_limit=3) or "").strip().lower()
+        if not reply:
+            reply = input("❓ Confirm (yes/no): ").strip().lower()
+        positives = {"yes", "y", "yeah", "yep", "sure", "ok", "okay", "confirm", "do it"}
+        return reply in positives
+
+    def voice_interactive_send_email(self):
+        """Fully voice-driven email composition -> send_email_auto"""
+        if not self.email:
+            return "📧 Email module not available"
+
+        to_addr = self.ask_voice("Who should I send it to? Say the email like user at example dot com.", timeout=15, phrase_limit=12, required=True)
+        if not to_addr:
+            return "❌ Could not capture recipient"
+
+        normalized = (
+            to_addr.lower()
+            .replace(" at ", "@")
+            .replace(" dot ", ".")
+            .replace(" underscore ", "_")
+            .replace(" dash ", "-")
+            .replace(" space ", "")
+        )
+        to_addr = normalized.replace(" ", "")
+
+        subject = self.ask_voice("What is the subject?", timeout=12, phrase_limit=10, required=True)
+        if not subject:
+            return "❌ Could not capture subject"
+
+        message = self.ask_voice("What is the message?", timeout=20, phrase_limit=40, required=True)
+        if not message:
+            return "❌ Could not capture message"
+
+        summary = f"Send email to {to_addr} with subject '{subject}'?"
+        if not self.confirm_voice(summary, timeout=8):
+            if self.speech and self.speech.tts_enabled:
+                self.speech.speak_async("Email cancelled")
+            return "❎ Cancelled: email"
+
+        try:
+            result = self.email.send_email_auto(to_addr, subject, message)
+            if self.speech and self.speech.tts_enabled:
+                self.speech.speak_async("Email sent")
+            return result if result else "✅ Email sent"
+        except Exception as e:
+            self.logger.error(f"Voice email send error: {e}")
+            if self.speech and self.speech.tts_enabled:
+                self.speech.speak_async("There was an error sending the email")
+            return f"❌ Error sending email: {e}"
+    # ===== end voice helpers =====
+
     def listen_and_respond(self):
-        """Main interaction loop"""
+        """Main interaction loop with voice input support"""
         print("\n" + "=" * 60)
         print("🎤 Specter AI AGENT - READY TO ASSIST")
         print("=" * 60)
         print("💡 Available commands:")
         print("   • Type 'help' for full command list")
         print("   • Type 'status' to see module availability")
+        print("   • Type 'listen' to use voice input")
         print("   • Type 'quit' to exit")
         print("=" * 60)
 
         while True:
             try:
-                user_input = input("\n🎯 You: ").strip()
+                # Get user input (text or voice)
+                if self.voice_mode:
+                    print(f"\n🎙️ Voice Mode Active (type 'text mode' to switch back)")
+                    user_input = self.get_voice_input()
+                    if user_input is None:
+                        continue
+                else:
+                    user_input = input("\n🎯 You: ").strip()
 
                 if not user_input:
                     continue
@@ -286,6 +418,14 @@ class SpecterAgent:
                 # Display response
                 print(f"\n🤖 Specter: {response}")
 
+                # Add speech output for short responses
+                if (
+                    self.speech and getattr(self.speech, "tts_enabled", False)
+                    and isinstance(response, str) and len(response) < 200
+                    and not any(word in response for word in ["Available commands:", "MODULE STATUS", "INSTALLATION HELP"])
+                ):
+                    self.speech.speak_async(response)
+
             except KeyboardInterrupt:
                 print("\n\n👋 Specter shutting down...")
                 break
@@ -294,106 +434,220 @@ class SpecterAgent:
                 print(f"❌ Error: {str(e)}")
 
     def process_command(self, command):
-        """Process user commands and route to appropriate modules"""
+        """Enhanced command processing with voice input commands and function routing"""
         try:
-            command_lower = command.lower().strip()
+            command_clean = command.lower().strip()
 
-            # Music commands
-            if any(word in command_lower for word in ['play', 'music', 'song', 'volume', 'stop music', 'pause']):
+            # Voice input mode controls
+            if any(word in command_clean for word in ['listen', 'voice mode', 'start listening']):
+                if self.speech and getattr(self.speech, "microphone", None):
+                    self.voice_mode = True
+                    return "🎙️ Voice input mode activated! Speak your commands. Say 'text mode' to switch back."
+                else:
+                    return "🎤 Microphone not available for voice input"
+
+            elif any(word in command_clean for word in ['text mode', 'stop listening', 'keyboard mode']):
+                self.voice_mode = False
+                return "⌨️ Text input mode activated! Type your commands normally."
+
+            elif any(word in command_clean for word in ['test microphone', 'mic test']):
+                if self.speech and getattr(self.speech, "microphone", None):
+                    print("🎤 Testing microphone - say something...")
+                    result = self.speech.listen(timeout=5)
+                    if result:
+                        return f"✅ Microphone test successful! You said: '{result}'"
+                    else:
+                        return "❌ Microphone test failed - no speech detected"
+                else:
+                    return "🎤 No microphone available for testing"
+
+            # Speech toggles and status
+            if any(word in command_clean for word in ['enable voice', 'turn on speech', 'enable tts']):
+                if self.speech:
+                    return self.speech.toggle_tts(True)
+                else:
+                    return "🎤 Speech engine not available"
+
+            elif any(word in command_clean for word in ['disable voice', 'turn off speech', 'disable tts']):
+                if self.speech:
+                    return self.speech.toggle_tts(False)
+                else:
+                    return "🎤 Speech engine not available"
+
+            elif any(word in command_clean for word in ['test speech', 'speech test']):
+                if self.speech:
+                    self.speech.test_functionality()
+                    return "🧪 Speech engine test completed"
+                else:
+                    return "🎤 Speech engine not available"
+
+            elif any(word in command_clean for word in ['speech status', 'voice status']):
+                if self.speech:
+                    status = self.speech.get_status()
+                    return (
+                        f"🎤 Speech Status:\n"
+                        f"• TTS Available: {status['tts_available']}\n"
+                        f"• TTS Enabled: {status['tts_enabled']}\n"
+                        f"• Microphone: {status['speech_recognition_available']}\n"
+                        f"• Voice Mode: {'Active' if self.voice_mode else 'Inactive'}"
+                    )
+                else:
+                    return "🎤 Speech engine not available"
+
+            # Intent detection path (if Groq/OpenAI client configured)
+            if hasattr(self, 'conversation') and self.conversation and getattr(self.conversation, "openai_client", None):
+                intent_result = self.conversation.detect_intent_and_respond(command)
+
+                # Function call routing
+                if isinstance(intent_result, dict) and intent_result.get("type") == "function_call":
+                    function_name = intent_result.get("function")
+                    print(f"🎯 Intent detected: {function_name}")
+
+                    if function_name == "send_email":
+                        if self.email:
+                            if self.voice_mode and self.speech and getattr(self.speech, "microphone", None):
+                                return self.voice_interactive_send_email()
+                            else:
+                                return self.email.send_email_interactive()
+                        else:
+                            return "📧 Email module not available"
+
+                    elif function_name == "play_music":
+                        if self.music:
+                            return self.music.handle_music_request(command)
+                        else:
+                            return "🎵 Music module not available"
+
+                    elif function_name == "manage_files":
+                        if self.file_manager:
+                            return self.file_manager.handle_file_request(command)
+                        else:
+                            return "📁 File manager not available"
+
+                    elif function_name == "get_news":
+                        if self.news:
+                            return self.news.get_news(command)
+                        else:
+                            return "📰 News module not available"
+
+                    elif function_name == "get_weather":
+                        if self.weather:
+                            return self.weather.get_weather(command)
+                        else:
+                            return "🌤️ Weather module not available"
+
+                    elif function_name == "schedule_event":
+                        if self.calendar:
+                            return self.calendar.handle_calendar_request(command)
+                        else:
+                            return "📅 Calendar module not available"
+
+                    elif function_name == "launch_app":
+                        if self.launcher:
+                            return self.launcher.launch_application(command)
+                        else:
+                            return "🚀 App launcher not available"
+
+                    elif function_name == "system_info":
+                        if self.system:
+                            return self.system.get_system_info()
+                        else:
+                            return "📊 System monitor not available"
+
+                    elif function_name == "get_draft":
+                        if self.email:
+                            return self.email.get_saved_draft()
+                        else:
+                            return "📧 Email module not available"
+
+                    elif function_name == "send_draft":
+                        if self.email:
+                            # Leave as-is (no hands-free flow assumed here)
+                            return self.email.send_draft()
+                        else:
+                            return "📧 Email module not available"
+
+                    elif function_name == "send_email_auto":
+                        if self.email:
+                            params = intent_result.get("params", {}) or {}
+                            return self.email.send_email_auto(
+                                params.get("recipient"),
+                                params.get("subject"),
+                                params.get("message")
+                            )
+
+                # Regular chat response passthrough
+                elif isinstance(intent_result, str):
+                    return intent_result
+
+            # Keyword-based routing fallback (preserved)
+            if any(word in command_clean for word in ['play', 'music', 'song']):
                 if self.music:
                     return self.music.handle_music_request(command)
                 else:
-                    return "🎵 Music module not available. Install pygame: pip install pygame"
+                    return "🎵 Music module not available"
 
-            # File commands
-            elif any(word in command_lower for word in ['find', 'file', 'folder', 'organize', 'search files']):
+            elif any(word in command_clean for word in ['email', 'send mail', 'send email']):
+                if self.email:
+                    if self.voice_mode and self.speech and getattr(self.speech, "microphone", None):
+                        return self.voice_interactive_send_email()
+                    else:
+                        return self.email.send_email_interactive()
+                else:
+                    return "📧 Email module not available"
+
+            # Optional explicit file ops; otherwise generic path still catches them
+            elif any(kw in command_clean for kw in ['move files', 'copy files', 'create script', 'delete files', 'find duplicates']):
                 if self.file_manager:
                     return self.file_manager.handle_file_request(command)
                 else:
-                    return "📁 File manager module not available"
+                    return "📁 File manager not available"
 
-            # App launcher commands
-            elif any(word in command_lower for word in ['open', 'launch', 'start', 'run app', 'close app']):
-                if self.launcher:
-                    return self.launcher.launch_application(command)
+            elif any(word in command_clean for word in ['find', 'file', 'folder', 'organize', 'search']):
+                if self.file_manager:
+                    return self.file_manager.handle_file_request(command)
                 else:
-                    return "🚀 App launcher module not available"
+                    return "📁 File manager not available"
 
-            # News commands
-            elif any(word in command_lower for word in ['news', 'headlines', 'current events']):
+            elif any(word in command_clean for word in ['news', 'headlines']):
                 if self.news:
                     return self.news.get_news(command)
                 else:
-                    return "📰 News module not available. Install newsapi: pip install newsapi-python"
+                    return "📰 News module not available"
 
-            # Weather commands
-            elif any(word in command_lower for word in ['weather', 'temperature', 'forecast']):
+            elif any(word in command_clean for word in ['weather', 'forecast']):
                 if self.weather:
                     return self.weather.get_weather(command)
                 else:
                     return "🌤️ Weather module not available"
 
-            # Calendar commands
-            elif any(word in command_lower for word in ['calendar', 'schedule', 'meeting', 'reminder', 'appointment']):
+            elif any(word in command_clean for word in ['calendar', 'schedule', 'meeting']):
                 if self.calendar:
                     return self.calendar.handle_calendar_request(command)
                 else:
                     return "📅 Calendar module not available"
 
-            # Email commands
-            elif any(word in command_lower for word in ['email', 'send mail', 'check mail']):
-                if self.email:
-                    return self.email.handle_email_request(command)
+            elif any(word in command_clean for word in ['open', 'launch', 'start']):
+                if self.launcher:
+                    return self.launcher.launch_application(command)
                 else:
-                    return "📧 Email module not available"
+                    return "🚀 App launcher not available"
 
-                    # System commands - FIXED VERSION
-            elif any(word in command_lower for word in ['system', 'performance', 'cpu', 'memory', 'disk', 'processes', 'analyze', 'monitor']):
+            elif any(word in command_clean for word in ['system', 'performance']):
                 if self.system:
-                    # Route to specific system methods based on request
-                    if 'quick status' in command_lower or (command_lower.strip() == 'status' and any(w in command_lower for w in ['system', 'cpu', 'memory'])):
-                        return self.system.get_quick_status()
-                    elif 'top processes' in command_lower or 'processes running' in command_lower or 'running processes' in command_lower:
-                        return self.system.get_top_processes(limit=10)
-                    elif 'performance' in command_lower and ('analyze' in command_lower or 'analysis' in command_lower):
-                        # Try AI analysis for performance requests
-                        try:
-                            return self.system.analyze_system_with_ai()
-                        except:
-                            return f"{self.system.get_performance_status()}\n\n{self.system.get_system_alerts()}"
-                    elif 'analyze' in command_lower or 'analysis' in command_lower:
-                        # Try AI analysis if available
-                        try:
-                            return self.system.analyze_system_with_ai()  
-                        except:
-                            return f"{self.system.get_performance_status()}\n\n{self.system.get_system_alerts()}"
-                    elif 'performance' in command_lower:
-                        return self.system.get_performance_status(detailed=True)
-                    elif 'alerts' in command_lower or 'warnings' in command_lower or 'health' in command_lower:
-                        return self.system.get_system_alerts()
-                    elif 'storage' in command_lower or 'disk' in command_lower:
-                        return self.system.get_storage_status()
-                    elif 'network' in command_lower:
-                        return self.system.get_network_status()
-                    elif 'battery' in command_lower:
-                        return self.system.get_battery_status()
-                    elif 'temperature' in command_lower or 'temp' in command_lower:
-                        return self.system.get_temperature_status()
-                    else:
-                        # Default to system overview for general system info requests
-                        return self.system.get_system_info()
+                    return self.system.get_system_info()
                 else:
-                    return "System monitor module not available"
+                    return "📊 System monitor not available"
 
-            # Conversation (default)
             else:
+                # Default to conversation
                 if self.conversation:
                     return self.conversation.chat(command)
                 else:
                     return self.fallback_conversation(command)
 
         except Exception as e:
-            self.logger.error(f"Command processing error: {e}")
+            self.logger.error(f"Enhanced command processing error: {e}")
             return f"Sorry, I encountered an error: {str(e)}"
 
     def fallback_conversation(self, command):
@@ -413,59 +667,85 @@ class SpecterAgent:
             if key in command_lower:
                 return response
 
-        return "I understand you're trying to chat! For full AI conversation, configure OpenAI or Gemini API keys in your .env file. For now, I can help with specific tasks - type 'help' to see what I can do!"
+        return "I understand you're trying to chat! For full AI conversation, configure GROQ_API_KEY in your .env file. For now, I can help with specific tasks - type 'help' to see what I can do!"
 
     def show_help(self):
-        """Show available commands based on loaded modules"""
+        """Show available commands based on loaded modules (Expanded Files)"""
         help_text = "\n🤖 Specter AI AGENT - AVAILABLE COMMANDS\n"
         help_text += "=" * 50 + "\n"
 
+        # Speech and voice input
+        if self.speech:
+            help_text += "\n🎤 SPEECH & VOICE (Available):\n"
+            help_text += "   • listen / voice mode       - Switch to voice input\n"
+            help_text += "   • text mode                 - Switch to text input\n"
+            help_text += "   • enable voice              - Turn on text-to-speech\n"
+            help_text += "   • disable voice             - Turn off text-to-speech\n"
+            help_text += "   • test speech               - Test TTS functionality\n"
+            help_text += "   • test microphone           - Test STT functionality\n"
+            help_text += "   • speech status             - Check speech engine status\n"
+        else:
+            help_text += "\n🎤 SPEECH (Unavailable - install SpeechRecognition pyttsx3)\n"
+
+        # Music
         if self.music:
             help_text += "\n🎵 MUSIC (Available):\n"
-            help_text += "   • play [song name] - Play music\n"
-            help_text += "   • stop music - Stop playback\n"
+            help_text += "   • play [song name]          - Play music\n"
+            help_text += "   • stop music                - Stop playback\n"
         else:
             help_text += "\n🎵 MUSIC (Unavailable - install pygame)\n"
 
+        # Files (expanded)
         if self.file_manager:
             help_text += "\n📁 FILES (Available):\n"
-            help_text += "   • find [filename] - Search files\n"
-            help_text += "   • organize files - Clean downloads\n"
+            help_text += "   • find [filename]           - Search files\n"
+            help_text += "   • organize files            - Clean downloads folder\n"
+            help_text += "   • move files                - Move files interactively\n"
+            help_text += "   • copy files                - Copy files interactively\n"
+            help_text += "   • create script             - Generate code/script templates\n"
+            help_text += "   • delete files              - Safe delete to trash/recycle\n"
+            help_text += "   • find duplicates           - Identify duplicate files\n"
+            help_text += "   • search for [pattern]      - Search by name or extension\n"
         else:
             help_text += "\n📁 FILES (Unavailable)\n"
 
+        # Apps
         if self.launcher:
             help_text += "\n🚀 APPS (Available):\n"
-            help_text += "   • open [app name] - Launch apps\n"
-            help_text += "   • open notepad - Launch specific apps\n"
+            help_text += "   • open [app name]           - Launch apps\n"
+            help_text += "   • open notepad              - Launch specific apps\n"
         else:
             help_text += "\n🚀 APPS (Unavailable)\n"
 
+        # News
         if self.news:
             help_text += "\n📰 NEWS (Available):\n"
-            help_text += "   • news - Get headlines\n"
-            help_text += "   • tech news - Category news\n"
+            help_text += "   • news                      - Get headlines\n"
+            help_text += "   • tech news                 - Category news\n"
         else:
             help_text += "\n📰 NEWS (Unavailable - install newsapi-python)\n"
 
+        # Weather
         if self.weather:
             help_text += "\n🌤️ WEATHER (Available):\n"
-            help_text += "   • weather - Current weather\n"
-            help_text += "   • weather in [city] - City weather\n"
+            help_text += "   • weather                   - Current weather\n"
+            help_text += "   • weather in [city]         - City weather\n"
         else:
             help_text += "\n🌤️ WEATHER (Unavailable)\n"
 
+        # System
         if self.system:
             help_text += "\n📊 SYSTEM (Available):\n"
-            help_text += "   • system status - System info\n"
+            help_text += "   • system status             - System info\n"
         else:
             help_text += "\n📊 SYSTEM (Unavailable)\n"
 
+        # General
         help_text += "\n💬 GENERAL:\n"
-        help_text += "   • help - Show this help\n"
-        help_text += "   • status - Module status\n"
-        help_text += "   • install - Installation help\n"
-        help_text += "   • quit - Exit Specter\n"
+        help_text += "   • help                      - Show this help\n"
+        help_text += "   • status                    - Module status\n"
+        help_text += "   • install                   - Installation help\n"
+        help_text += "   • quit                      - Exit Specter\n"
         help_text += "=" * 50
 
         print(help_text)
@@ -476,7 +756,7 @@ class SpecterAgent:
         print("=" * 30)
 
         status_map = {
-            'speech': ('🎤 Speech Engine', self.speech),
+            'speech': ('🎤 Enhanced Speech Engine', self.speech),
             'conversation': ('💬 Conversation', self.conversation),
             'file_manager': ('📁 File Manager', self.file_manager),
             'music': ('🎵 Music Player', self.music),
@@ -498,6 +778,17 @@ class SpecterAgent:
 
         print(f"\n📈 {available}/{len(status_map)} modules active")
 
+        if self.speech:
+            print("\n🎤 Speech Engine Details:")
+            try:
+                speech_status = self.speech.get_status()
+                print(f"   🔊 TTS Available: {speech_status['tts_available']}")
+                print(f"   🗣️ TTS Enabled: {speech_status['tts_enabled']}")
+                print(f"   🎧 Microphone: {speech_status['speech_recognition_available']}")
+                print(f"   🎙️ Voice Mode: {'Active' if self.voice_mode else 'Inactive'}")
+            except Exception as e:
+                print(f"   ⚠️ Status check failed: {e}")
+
         if self.system:
             try:
                 quick_info = self.system.get_quick_status()
@@ -514,6 +805,14 @@ class SpecterAgent:
         print("To enable all features, install missing packages:")
         print()
 
+        if not self.speech:
+            print("🎤 For Complete Speech Engine (STT + TTS):")
+            print("   pip install SpeechRecognition pyttsx3 pyaudio")
+            print("   # On Windows also: pip install pywin32")
+            print("   # On macOS: brew install portaudio")
+            print("   # On Linux: sudo apt-get install portaudio19-dev")
+            print()
+
         if not self.music:
             print("🎵 For Music Player:")
             print("   pip install pygame")
@@ -525,7 +824,7 @@ class SpecterAgent:
             print()
 
         print("🔑 For full AI features, add to .env file:")
-        print("   OPENAI_API_KEY=your_key_here")
+        print("   GROQ_API_KEY=your_groq_key")
         print("   NEWS_API_KEY=your_news_key")
         print("   WEATHER_API_KEY=your_weather_key")
         print("=" * 30)
@@ -542,6 +841,12 @@ class SpecterAgent:
         except:
             pass
 
+        try:
+            if self.speech and hasattr(self.speech, 'tts_manager') and self.speech.tts_manager:
+                self.speech.tts_manager.stop()
+        except:
+            pass
+
         print("🔚 Specter shutting down...")
 
 
@@ -550,13 +855,11 @@ def main():
     try:
         Specter = SpecterAgent()
         Specter.listen_and_respond()
-
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user. Goodbye!")
     except Exception as e:
         print(f"❌ Fatal error: {str(e)}")
         return 1
-
     return 0
 
 
