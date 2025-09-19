@@ -99,6 +99,16 @@ except ImportError as e:
     print(f"❌ News Fetcher failed: {e}")
     NewsFetcher = None
 
+# Weather Engine
+try:
+    from weather import WeatherEngine
+    modules_status['weather'] = True
+    print("✅ Weather Engine loaded")
+except ImportError as e:
+    modules_status['weather'] = False
+    print(f"❌ Weather Engine failed: {e}")
+    WeatherEngine = None
+
 # Calendar Manager
 try:
     from calendar_manager import CalendarManager
@@ -118,16 +128,6 @@ except ImportError as e:
     modules_status['system'] = False
     print(f"❌ System Monitor failed: {e}")
     SystemMonitor = None
-
-# Weather Engine
-try:
-    from weather import WeatherEngine
-    modules_status['weather'] = True
-    print("✅ Weather Engine loaded")
-except ImportError as e:
-    modules_status['weather'] = False
-    print(f"❌ Weather Engine failed: {e}")
-    WeatherEngine = None
 
 # Email Handler
 try:
@@ -227,6 +227,16 @@ class SpecterAgent:
         else:
             self.news = None
 
+        # Weather Engine
+        if modules_status.get('weather') and WeatherEngine:
+            try:
+                self.weather = WeatherEngine()
+            except Exception as e:
+                print(f"⚠️ Weather Engine init failed: {e}")
+                self.weather = None
+        else:
+            self.weather = None
+
         # Calendar Manager
         if modules_status.get('calendar') and CalendarManager:
             try:
@@ -246,16 +256,6 @@ class SpecterAgent:
                 self.system = None
         else:
             self.system = None
-
-        # Weather Engine
-        if modules_status.get('weather') and WeatherEngine:
-            try:
-                self.weather = WeatherEngine()
-            except Exception as e:
-                print(f"⚠️ Weather Engine init failed: {e}")
-                self.weather = None
-        else:
-            self.weather = None
 
         # Email Handler
         if modules_status.get('email') and EmailHandler:
@@ -619,7 +619,7 @@ class SpecterAgent:
                 if self.weather:
                     return self.weather.get_weather(command)
                 else:
-                    return "🌤️ Weather module not available"
+                    return "🌤️ Weather module not available. Configure GROQ_API_KEY in your .env file"
 
             elif any(word in command_clean for word in ['calendar', 'schedule', 'meeting']):
                 if self.calendar:
@@ -633,12 +633,11 @@ class SpecterAgent:
                 else:
                     return "🚀 App launcher not available"
 
-            elif any(word in command_clean for word in ['system', 'performance']):
+            elif any(word in command_clean for word in ['system', 'performance', 'cpu', 'memory', 'disk', 'processes', 'analyze', 'monitor']):
                 if self.system:
                     return self.system.get_system_info()
                 else:
-                    return "📊 System monitor not available"
-
+                    return "📊 System monitor module not available"
             else:
                 # Default to conversation
                 if self.conversation:
@@ -723,7 +722,7 @@ class SpecterAgent:
             help_text += "   • news                      - Get headlines\n"
             help_text += "   • tech news                 - Category news\n"
         else:
-            help_text += "\n📰 NEWS (Unavailable - install newsapi-python)\n"
+            help_text += "\n📰 NEWS (Unavailable - configure GROQ_API_KEY)\n"
 
         # Weather
         if self.weather:
@@ -731,7 +730,7 @@ class SpecterAgent:
             help_text += "   • weather                   - Current weather\n"
             help_text += "   • weather in [city]         - City weather\n"
         else:
-            help_text += "\n🌤️ WEATHER (Unavailable)\n"
+            help_text += "\n🌤️ WEATHER (Unavailable - configure GROQ_API_KEY)\n"
 
         # System
         if self.system:
@@ -752,7 +751,7 @@ class SpecterAgent:
 
     def show_status(self):
         """Show module status"""
-        print("\n📊 Specter MODULE STATUS")
+        print("\n🤖 Specter MODULE STATUS")
         print("=" * 30)
 
         status_map = {
@@ -776,7 +775,18 @@ class SpecterAgent:
             else:
                 print(f"❌ {name}")
 
-        print(f"\n📈 {available}/{len(status_map)} modules active")
+        print(f"\n📊 {available}/{len(status_map)} modules active")
+
+        if self.speech:
+            print("\n🎤 Speech Engine Details:")
+            try:
+                speech_status = self.speech.get_status()
+                print(f"   🔊 TTS Available: {speech_status['tts_available']}")
+                print(f"   🗣️ TTS Enabled: {speech_status['tts_enabled']}")
+                print(f"   🎧 Microphone: {speech_status['speech_recognition_available']}")
+                print(f"   🎙️ Voice Mode: {'Active' if self.voice_mode else 'Inactive'}")
+            except Exception as e:
+                print(f"   ⚠️ Status check failed: {e}")
 
         if self.speech:
             print("\n🎤 Speech Engine Details:")
@@ -826,13 +836,14 @@ class SpecterAgent:
         print("🔑 For full AI features, add to .env file:")
         print("   GROQ_API_KEY=your_groq_key")
         print("   NEWS_API_KEY=your_news_key")
+        print("   OPENAI_API_KEY=your_openai_key")
         print("   WEATHER_API_KEY=your_weather_key")
         print("=" * 30)
 
     def shutdown(self):
         """Graceful shutdown"""
         print("\n👋 Thank you for using Specter!")
-        print("🎯 Hackathon version - Built with ❤️")
+        print("Hackathon version - Built with ❤️")
 
         # Cleanup
         try:
@@ -853,12 +864,12 @@ class SpecterAgent:
 def main():
     """Main function"""
     try:
-        Specter = SpecterAgent()
-        Specter.listen_and_respond()
+        specter = SpecterAgent()
+        specter.listen_and_respond()
     except KeyboardInterrupt:
         print("\n\n👋 Interrupted by user. Goodbye!")
     except Exception as e:
-        print(f"❌ Fatal error: {str(e)}")
+        print(f"Fatal error: {str(e)}")
         return 1
     return 0
 

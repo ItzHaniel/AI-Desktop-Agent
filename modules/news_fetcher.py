@@ -3,7 +3,7 @@
 News Fetcher - Groq AI Powered Version
 Uses your existing Groq API to generate news summaries
 """
-
+#news_fetcher.py
 import openai
 import os
 from datetime import datetime
@@ -36,7 +36,7 @@ class NewsFetcher:
         query = query.lower()
         
         try:
-            if "headlines" in query or "top news" in query:
+            if "headlines" in query or "top news" in query or query.strip() == "news":
                 return self.get_top_headlines()
             elif "technology" in query or "tech" in query:
                 return self.get_category_news("technology")
@@ -50,6 +50,8 @@ class NewsFetcher:
                 return self.get_category_news("entertainment")
             elif "science" in query:
                 return self.get_category_news("science")
+            elif "politics" in query or "political" in query:
+                return self.get_category_news("politics")
             else:
                 # Extract topic from query
                 topic = self.extract_topic(query)
@@ -61,9 +63,9 @@ class NewsFetcher:
     
     def extract_topic(self, query):
         """Extract news topic from query"""
-        words_to_remove = ["news", "about", "tell", "me", "latest", "current", "get", "fetch", "find"]
+        words_to_remove = ["news", "about", "tell", "me", "latest", "current", "get", "fetch", "find", "show"]
         words = query.split()
-        topic_words = [word for word in words if word not in words_to_remove]
+        topic_words = [word for word in words if word.lower() not in words_to_remove]
         return " ".join(topic_words) if topic_words else "general"
     
     def get_top_headlines(self):
@@ -102,12 +104,13 @@ class NewsFetcher:
             "sports": "game results, player transfers, tournament updates, records broken, and sports business news",
             "health": "medical breakthroughs, public health updates, new treatments, health research, and wellness trends",
             "entertainment": "movie releases, celebrity news, music industry, streaming updates, and entertainment business",
-            "science": "research discoveries, space exploration, climate science, new studies, and scientific innovations"
+            "science": "research discoveries, space exploration, climate science, new studies, and scientific innovations",
+            "politics": "government updates, policy changes, elections, political developments, and international relations"
         }
         
         category_focus = category_prompts.get(category, "general news and current events")
         
-        prompt = f"Generate 6 realistic {category} news articles for {current_date}. Focus on: {category_focus} Format each article as: **[Number]. [Headline]** *[News Source]* [Brief 2-sentence summary] Make articles current, informative, and realistic. Don't include false information."
+        prompt = f"Generate 6 realistic {category} news articles for {current_date}. Focus on: {category_focus}. Format each article as: **[Number]. [Headline]** *[News Source]* [Brief 2-sentence summary] Make articles current, informative, and realistic. Don't include false information."
         
         try:
             response = self.openai_client.chat.completions.create(
@@ -155,6 +158,34 @@ class NewsFetcher:
             self.logger.error(f"Topic search error: {e}")
             return f"Error generating news about '{topic}'. Please try again."
     
+    def get_breaking_news(self):
+        """Generate breaking news alerts using Groq"""
+        current_date = datetime.now().strftime("%B %d, %Y")
+        current_time = datetime.now().strftime("%I:%M %p")
+        
+        prompt = f"Generate 3-4 realistic breaking news alerts for {current_date} at {current_time}. Focus on urgent, developing stories across different categories. Format as: 🚨 **BREAKING**: [Headline] *[Source]* • [Time] [Brief urgent summary] Make it realistic and current."
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "You are a breaking news alert system. Generate realistic, urgent news updates."},
+                    {"role": "user", "content": prompt}
+                ],
+                model=self.model_name,
+                max_tokens=350,
+                temperature=0.8
+            )
+            
+            result = f"🚨 **BREAKING NEWS** - {current_date} {current_time}\n"
+            result += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            result += response.choices[0].message.content.strip()
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Breaking news error: {e}")
+            return "Error generating breaking news. Please try again."
+    
     def get_status(self):
         """Get current fetcher status"""
         return {
@@ -162,6 +193,6 @@ class NewsFetcher:
             "groq_connected": self.openai_client is not None,
             "model": self.model_name if self.openai_client else "None",
             "api_key_set": os.getenv('GROQ_API_KEY') is not None,
-            "categories": ["headlines", "technology", "business", "sports", "health", "entertainment", "science"],
-            "features": ["search", "breaking_news", "category_news"]
+            "categories": ["headlines", "technology", "business", "sports", "health", "entertainment", "science", "politics"],
+            "features": ["search", "breaking_news", "category_news", "top_headlines"]
         }

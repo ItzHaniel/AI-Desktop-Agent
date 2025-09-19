@@ -2,6 +2,7 @@
 """
 Conversation Engine - Merged: Groq Chat, Modes/History, Intent Detection, Email Extraction
 """
+#conversation.py
 
 import openai  # Using OpenAI-compatible Groq endpoint
 import os
